@@ -4,7 +4,12 @@ import { env } from '$env/dynamic/private';
 import { fail } from '@sveltejs/kit';
 
 export async function load({ locals }) {
-	const admins = await getAllAdmins();
+	let admins = [];
+	try {
+		admins = await getAllAdmins();
+	} catch (err) {
+		console.error('Error fetching admins in load:', err);
+	}
 
 	let databases = [];
 	try {
@@ -21,14 +26,27 @@ export async function load({ locals }) {
 		console.error('Error fetching databases in load:', err);
 	}
 
+	const rawDirect = env.DATABASE_BASE_URL || process.env.DATABASE_BASE_URL || env.ADMIN_DATABASE_URL || process.env.ADMIN_DATABASE_URL || '';
+	const rawPooled = env.DATABASE_URL || process.env.DATABASE_URL || '';
+
+	let neonEndpoint = 'Neon Cloud';
+	try {
+		const targetHost = env.DATABASE_URL || process.env.DATABASE_URL;
+		if (targetHost) {
+			neonEndpoint = new URL(targetHost).host;
+		}
+	} catch {}
+
 	return {
-		currentAdmin: locals.admin,
-		admins,
-		databases,
+		currentAdmin: locals.admin || null,
+		admins: admins || [],
+		databases: databases || [],
 		neonBranch: env.NEON_BRANCH || process.env.NEON_BRANCH || 'production',
 		hasNeonAuth: Boolean(env.NEON_AUTH_BASE_URL || process.env.NEON_AUTH_BASE_URL),
 		hasRealtime: Boolean(env.NEON_REALTIME_URL || process.env.NEON_REALTIME_URL),
-		neonEndpoint: env.DATABASE_URL ? new URL(env.DATABASE_URL).host : 'Neon Cloud'
+		neonEndpoint,
+		rawDirectUrl: rawDirect,
+		rawPooledUrl: rawPooled
 	};
 }
 
@@ -67,7 +85,7 @@ export const actions = {
 		}
 	},
 
-	updateAdmin: async ({ request }) => {
+	updateAdmin: async ({ request, locals, cookies }) => {
 		const formData = await request.formData();
 		const id = formData.get('id');
 		const email = formData.get('email')?.toString().trim();
@@ -79,6 +97,19 @@ export const actions = {
 		}
 
 		try {
+			// Periksa apakah admin yang diedit adalah akun yang sedang login saat ini
+			let isSelf = false;
+			if (locals.admin) {
+				if (String(locals.admin.id) === String(id)) {
+					isSelf = true;
+				} else {
+					const existing = await adminPool.query('SELECT email FROM admins WHERE id = $1', [id]);
+					if (existing.rows[0]?.email?.toLowerCase() === locals.admin.email?.toLowerCase()) {
+						isSelf = true;
+					}
+				}
+			}
+
 			if (password && password.trim().length >= 6) {
 				const pwHash = hashPassword(password.trim());
 				await adminPool.query('UPDATE admins SET email = $1, role = $2, password_hash = $3 WHERE id = $4', [
@@ -94,6 +125,13 @@ export const actions = {
 					id
 				]);
 			}
+
+			if (isSelf) {
+				// Hapus cookie sesi agar otomatis logout dan perlu login ulang
+				cookies.delete('admin_session', { path: '/' });
+				return { adminSuccess: `Akun Anda berhasil diperbarui. Silakan login kembali.`, requireRelogin: true };
+			}
+
 			return { adminSuccess: `Data admin ${email} berhasil diperbarui.` };
 		} catch (err) {
 			console.error('Update admin error:', err);

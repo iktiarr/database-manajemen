@@ -1,6 +1,6 @@
 import pg from 'pg';
 
-const BASE_URL = 'http://localhost:5174';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
 const MASTER_KEY = 'dev-master-key-12345';
 const TEST_DB = 'e2e_gateway_test_db';
 

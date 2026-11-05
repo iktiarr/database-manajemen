@@ -5,13 +5,13 @@ import { adminPool } from '#lib/server/db.js';
 /**
  * Endpoint GET untuk mendapatkan daftar database
  */
-export async function GET({ request }) {
-	// 1. Validasi Master API Key
+export async function GET({ request, locals }) {
 	const authHeader = request.headers.get('authorization');
 	const masterKey = env.APP_MASTER_KEY || process.env.APP_MASTER_KEY;
+	const isMasterKeyValid = masterKey && authHeader === `Bearer ${masterKey}`;
 
-	if (!masterKey || !authHeader || authHeader !== `Bearer ${masterKey}`) {
-		return json({ error: 'Unauthorized: Missing or invalid Master API Key' }, { status: 401 });
+	if (!locals.admin && !isMasterKeyValid) {
+		return json({ error: 'Unauthorized: Harap login atau sediakan Master API Key' }, { status: 401 });
 	}
 
 	try {
@@ -33,13 +33,13 @@ export async function GET({ request }) {
 /**
  * Endpoint POST untuk membuat database baru
  */
-export async function POST({ request }) {
-	// 1. Validasi Master API Key
+export async function POST({ request, locals }) {
 	const authHeader = request.headers.get('authorization');
 	const masterKey = env.APP_MASTER_KEY || process.env.APP_MASTER_KEY;
+	const isMasterKeyValid = masterKey && authHeader === `Bearer ${masterKey}`;
 
-	if (!masterKey || !authHeader || authHeader !== `Bearer ${masterKey}`) {
-		return json({ error: 'Unauthorized: Missing or invalid Master API Key' }, { status: 401 });
+	if (!locals.admin && !isMasterKeyValid) {
+		return json({ error: 'Unauthorized: Harap login atau sediakan Master API Key' }, { status: 401 });
 	}
 
 	// 2. Parse request JSON body

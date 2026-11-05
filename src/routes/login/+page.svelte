@@ -6,6 +6,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import EyeIcon from '@lucide/svelte/icons/eye';
+	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 
 	let { form } = $props();
 	let loading = $state(false);
@@ -78,14 +80,20 @@
 							required
 							autocomplete="current-password"
 							placeholder="••••••••••••"
-							class="bg-slate-50/70 border-slate-200 text-xs font-mono rounded-lg pr-16"
+							class="bg-slate-50/70 border-slate-200 text-xs font-mono rounded-lg pr-9"
 						/>
 						<button
 							type="button"
 							onclick={() => (showPassword = !showPassword)}
-							class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 hover:text-slate-700 font-medium px-1.5 py-0.5 transition cursor-pointer"
+							class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition focus:outline-none cursor-pointer p-0.5 rounded"
+							title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+							aria-label={showPassword ? 'Sembunyikan password' : 'Lihat password'}
 						>
-							{showPassword ? 'Hide' : 'Show'}
+							{#if showPassword}
+								<EyeOffIcon class="w-4 h-4" />
+							{:else}
+								<EyeIcon class="w-4 h-4" />
+							{/if}
 						</button>
 					</div>
 				</div>
