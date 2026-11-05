@@ -1,0 +1,20 @@
+/**
+ * SvelteKit Environment Variables Declaration
+ */
+export const variables = {
+	ADMIN_DATABASE_URL: {},
+	DATABASE_BASE_URL: {},
+	APP_MASTER_KEY: {},
+	DATABASE_URL: {},
+	DATABASE_URL_UNPOOLED: {},
+	NEON_BRANCH: {},
+	NEON_AUTH_BASE_URL: {},
+	NEON_AUTH_JWKS_URL: {},
+	NEON_REALTIME_URL: {},
+	NEON_REALTIME_SECRET: {},
+	AWS_ACCESS_KEY_ID: {},
+	AWS_SECRET_ACCESS_KEY: {},
+	AWS_ENDPOINT_URL_S3: {},
+	AWS_REGION: {},
+	NEON_FUNCTION_HELLO_BASE_URL: {}
+};
