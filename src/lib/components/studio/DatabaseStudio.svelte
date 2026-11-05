@@ -22,6 +22,15 @@
 	import TrashIcon from '@lucide/svelte/icons/trash';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import KeyIcon from '@lucide/svelte/icons/key';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import LayersIcon from '@lucide/svelte/icons/layers';
+	import GlobeIcon from '@lucide/svelte/icons/globe';
+	import LockIcon from '@lucide/svelte/icons/lock';
+	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
+	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 
 	let {
 		databases = $bindable([]),
@@ -30,12 +39,28 @@
 		masterKey = ''
 	} = $props();
 
-	// Studio Local State
+	// View mode state: 'list' (Daftar List Project) | 'detail' (Tabel & Explorer Project)
+	let viewMode = $state('list');
+	let searchProject = $state('');
+
+	// Active selected project
 	let selectedStudioDb = $state('neondb');
 	let currentLoadedDb = '';
+
+	// Connection string format & scope
 	let connTab = $state('env'); // 'env' | 'pooled' | 'direct' | 'prisma'
+	let connScope = $state('project'); // 'project' | 'universal'
 	let showConnPassword = $state(false);
 	let copiedConnString = $state(false);
+	let copiedProjectCard = $state(null);
+
+	// Custom DB Password state
+	let customDbPassword = $state('');
+	let showChangeDbPasswordModal = $state(false);
+	let inputCustomPassword = $state('');
+	let showModalPassword = $state(false);
+
+	// Project Creation Dialog
 	let isRefreshingDbs = $state(false);
 	let newDbName = $state('');
 	let isCreatingDb = $state(false);
@@ -87,6 +112,12 @@
 	];
 
 	onMount(() => {
+		const savedCustomPw = localStorage.getItem('neon_custom_db_password');
+		if (savedCustomPw) {
+			customDbPassword = savedCustomPw;
+			inputCustomPassword = savedCustomPw;
+		}
+
 		const savedStudioDb = localStorage.getItem('app_studio_db');
 		if (savedStudioDb && databases.some((d) => d.name === savedStudioDb)) {
 			selectedStudioDb = savedStudioDb;
@@ -102,7 +133,7 @@
 	});
 
 	$effect(() => {
-		if (selectedStudioDb && selectedStudioDb !== currentLoadedDb) {
+		if (selectedStudioDb && selectedStudioDb !== currentLoadedDb && viewMode === 'detail') {
 			currentLoadedDb = selectedStudioDb;
 			if (typeof localStorage !== 'undefined') {
 				localStorage.setItem('app_studio_db', selectedStudioDb);
@@ -111,8 +142,8 @@
 		}
 	});
 
-	function getDbConnectionString(dbName, mode = 'pooled', masked = false) {
-		if (!dbName) return '';
+	// Connection String Generator
+	function getDbConnectionString(dbName, mode = 'pooled', masked = false, forceUniversal = false) {
 		const rawDirect = rawDirectUrl || '';
 		const rawPooled = rawPooledUrl || rawDirect;
 
@@ -122,7 +153,12 @@
 
 		try {
 			const u = new URL(baseStr);
-			u.pathname = `/${dbName}`;
+			if (!forceUniversal && dbName) {
+				u.pathname = `/${dbName}`;
+			}
+			if (customDbPassword.trim()) {
+				u.password = customDbPassword.trim();
+			}
 			let connStr = u.toString();
 			if (masked) {
 				connStr = connStr.replace(/(:)([^@/]+)(@)/, '$1••••••••••••$3');
@@ -133,25 +169,111 @@
 		}
 	}
 
-	let activeConnString = $derived.by(() => {
-		if (connTab === 'direct') {
-			return getDbConnectionString(selectedStudioDb, 'direct', !showConnPassword);
-		}
+	function buildFormattedString(dbName, mode, masked, forceUniversal) {
+		const str = getDbConnectionString(dbName, mode, masked, forceUniversal);
 		if (connTab === 'env') {
-			return `DATABASE_URL="${getDbConnectionString(selectedStudioDb, 'pooled', !showConnPassword)}"`;
+			return `DATABASE_URL="${str}"`;
 		}
 		if (connTab === 'prisma') {
-			return `// schema.prisma\ndatasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL") // ${getDbConnectionString(selectedStudioDb, 'pooled', !showConnPassword)}\n}`;
+			return `// schema.prisma\ndatasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL") // ${str}\n}`;
 		}
-		return getDbConnectionString(selectedStudioDb, 'pooled', !showConnPassword);
+		return str;
+	}
+
+	// Active string inside detail view
+	let activeDetailConnString = $derived.by(() => {
+		const isUniversal = connScope === 'universal';
+		const mode = connTab === 'direct' ? 'direct' : 'pooled';
+		return buildFormattedString(selectedStudioDb, mode, !showConnPassword, isUniversal);
 	});
 
-	function copyConnectionStringText() {
-		navigator.clipboard.writeText(activeConnString);
+	// Universal All-In-One string for the list page
+	let universalConnString = $derived.by(() => {
+		const mode = connTab === 'direct' ? 'direct' : 'pooled';
+		return buildFormattedString(null, mode, !showConnPassword, true);
+	});
+
+	function copyDetailConnectionString() {
+		navigator.clipboard.writeText(activeDetailConnString);
 		copiedConnString = true;
 		setTimeout(() => {
 			copiedConnString = false;
 		}, 2000);
+	}
+
+	function copyUniversalConnectionString() {
+		navigator.clipboard.writeText(universalConnString);
+		copiedConnString = true;
+		setTimeout(() => {
+			copiedConnString = false;
+		}, 2000);
+	}
+
+	function copyProjectCardString(projectName) {
+		const str = `DATABASE_URL="${getDbConnectionString(projectName, 'pooled', false, false)}"`;
+		navigator.clipboard.writeText(str);
+		copiedProjectCard = projectName;
+		setTimeout(() => {
+			copiedProjectCard = null;
+		}, 2000);
+	}
+
+	function openProjectDetail(projectName) {
+		selectedStudioDb = projectName;
+		connScope = 'project';
+		viewMode = 'detail';
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('app_studio_db', projectName);
+		}
+		loadStudioTables(projectName);
+	}
+
+	function backToProjectsList() {
+		viewMode = 'list';
+	}
+
+	function openChangeDbPasswordModal() {
+		inputCustomPassword = customDbPassword;
+		showChangeDbPasswordModal = true;
+	}
+
+	function handleSaveCustomPassword(e) {
+		e.preventDefault();
+		customDbPassword = inputCustomPassword.trim();
+		if (typeof localStorage !== 'undefined') {
+			if (customDbPassword) {
+				localStorage.setItem('neon_custom_db_password', customDbPassword);
+			} else {
+				localStorage.removeItem('neon_custom_db_password');
+			}
+		}
+		showChangeDbPasswordModal = false;
+	}
+
+	function handleResetDefaultPassword() {
+		inputCustomPassword = '';
+		customDbPassword = '';
+		if (typeof localStorage !== 'undefined') {
+			localStorage.removeItem('neon_custom_db_password');
+		}
+		showChangeDbPasswordModal = false;
+	}
+
+	async function refreshDatabasesList() {
+		isRefreshingDbs = true;
+		try {
+			const res = await fetch('/api/databases', {
+				headers: masterKey.trim() ? { Authorization: `Bearer ${masterKey.trim()}` } : {}
+			});
+			const result = await res.json();
+			if (res.ok && result.databases) {
+				databases = result.databases;
+			}
+		} catch (err) {
+			console.error('Failed refreshing databases:', err);
+		} finally {
+			isRefreshingDbs = false;
+		}
 	}
 
 	async function loadStudioTables(dbName) {
@@ -203,7 +325,7 @@
 		}
 	}
 
-	async function handleCreateDatabase(e) {
+	async function handleCreateProject(e) {
 		e.preventDefault();
 		dbFeedback = { type: '', text: '' };
 
@@ -211,7 +333,7 @@
 		if (!cleanName || !/^[a-zA-Z0-9_]+$/.test(cleanName)) {
 			dbFeedback = {
 				type: 'error',
-				text: 'Nama database harus berupa huruf, angka, atau underscore (/^[a-zA-Z0-9_]+$/).'
+				text: 'Nama project harus berupa huruf, angka, atau underscore (/^[a-zA-Z0-9_]+$/).'
 			};
 			return;
 		}
@@ -230,7 +352,7 @@
 
 			const result = await res.json();
 			if (!res.ok) {
-				throw new Error(result.error || 'Gagal membuat database.');
+				throw new Error(result.error || 'Gagal membuat project.');
 			}
 
 			if (!databases.some((d) => d.name === cleanName)) {
@@ -246,7 +368,8 @@
 				localStorage.setItem('app_studio_db', cleanName);
 			}
 
-			await loadStudioTables(cleanName);
+			// Masuk langsung ke detail project yang baru dibuat
+			openProjectDetail(cleanName);
 		} catch (err) {
 			dbFeedback = { type: 'error', text: err.message };
 		} finally {
@@ -308,8 +431,18 @@
 
 	async function handleInsertRow(e) {
 		e.preventDefault();
+		if (!selectedTable) return;
+
 		isInsertingRow = true;
 		try {
+			const dataToInsert = {};
+			for (const [key, val] of Object.entries(newRowData)) {
+				if (val === '' || val === null || val === undefined) {
+					continue;
+				}
+				dataToInsert[key] = val;
+			}
+
 			const res = await fetch('/api/studio', {
 				method: 'POST',
 				headers: {
@@ -320,16 +453,17 @@
 					action: 'insertRow',
 					dbName: selectedStudioDb,
 					tableName: selectedTable,
-					rowData: newRowData
+					data: dataToInsert
 				})
 			});
 
 			const result = await res.json();
-			if (!res.ok) throw new Error(result.error || 'Gagal menambahkan baris data');
+			if (!res.ok) throw new Error(result.error || 'Gagal menambahkan baris');
 
 			showInsertRowDialog = false;
 			newRowData = {};
 			await loadTableData(selectedStudioDb, selectedTable);
+
 			const t = studioTables.find((item) => item.name === selectedTable);
 			if (t) t.rowCount = (t.rowCount || 0) + 1;
 		} catch (err) {
@@ -341,7 +475,7 @@
 
 	async function handleAddColumn(e) {
 		e.preventDefault();
-		if (!newColName.trim()) return;
+		if (!selectedTable || !newColName.trim()) return;
 
 		isAddingColumn = true;
 		try {
@@ -355,22 +489,22 @@
 					action: 'addColumn',
 					dbName: selectedStudioDb,
 					tableName: selectedTable,
-					columnName: newColName.trim(),
-					columnType: newColType,
-					nullable: newColNullable,
-					defaultValue: newColDefault.trim()
+					column: {
+						name: newColName.trim(),
+						type: newColType,
+						nullable: newColNullable,
+						defaultValue: newColDefault.trim()
+					}
 				})
 			});
 
 			const result = await res.json();
-			if (!res.ok) throw new Error(result.error || 'Gagal menambahkan kolom');
+			if (!res.ok) throw new Error(result.error || 'Gagal menambah kolom');
 
 			showAddColumnDialog = false;
 			newColName = '';
-			newColType = 'VARCHAR(255)';
-			newColNullable = true;
 			newColDefault = '';
-
+			newColNullable = true;
 			await loadTableData(selectedStudioDb, selectedTable);
 		} catch (err) {
 			alert(err.message);
@@ -380,7 +514,9 @@
 	}
 
 	async function handleDeleteRow(pkCol, pkVal) {
-		if (!confirm('Apakah Anda yakin ingin menghapus baris data ini?')) return;
+		if (!selectedTable || pkVal === undefined) return;
+		if (!confirm(`Hapus baris dengan ${pkCol} = ${pkVal}?`)) return;
+
 		try {
 			const res = await fetch('/api/studio', {
 				method: 'POST',
@@ -392,8 +528,8 @@
 					action: 'deleteRow',
 					dbName: selectedStudioDb,
 					tableName: selectedTable,
-					pkColumn: pkCol,
-					pkValue: pkVal
+					primaryKey: pkCol,
+					value: pkVal
 				})
 			});
 
@@ -445,6 +581,10 @@
 		newTableColumns = newTableColumns.filter((_, i) => i !== idx);
 	}
 
+	let filteredProjects = $derived(
+		databases.filter((d) => d.name.toLowerCase().includes(searchProject.toLowerCase()))
+	);
+
 	let filteredStudioTables = $derived(
 		studioTables.filter((t) => t.name.toLowerCase().includes(searchStudioTable.toLowerCase()))
 	);
@@ -454,61 +594,17 @@
 	);
 </script>
 
-<div class="space-y-5 w-full">
-	<!-- Bar Atas: Judul, Selector Database & Tombol Tambah Database -->
-	<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-		<div>
-			<h2 class="text-xl font-bold tracking-tight text-slate-900">Database Studio & Table Explorer</h2>
-			<p class="text-xs text-slate-400 mt-0.5">Kelola database Neon, salin connection string project, buat tabel, dan pantau data secara dinamis</p>
-		</div>
-
-		<div class="flex items-center gap-2.5">
-			<!-- Dropdown Selector Database Aktif -->
-			<div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl p-1 shadow-xs">
-				<DatabaseIcon class="w-3.5 h-3.5 text-slate-400 ml-2 shrink-0" />
-				<div class="w-44">
-					<Combobox
-						bind:value={selectedStudioDb}
-						options={databases.map((db) => ({ value: db.name, label: db.name }))}
-						placeholder="Pilih Database..."
-						class="border-0 bg-transparent py-1 text-xs font-mono font-bold"
-					/>
-				</div>
-			</div>
-
-			<Button
-				variant="outline"
-				size="sm"
-				disabled={isLoadingStudio}
-				onclick={() => loadStudioTables(selectedStudioDb)}
-				class="text-xs font-medium border-slate-200 h-9"
-				title="Refresh data tabel"
-			>
-				<RefreshCwIcon class="w-3.5 h-3.5 {isLoadingStudio ? 'animate-spin' : ''}" />
-			</Button>
-
-			<Button
-				size="sm"
-				onclick={() => {
-					dbFeedback = { type: '', text: '' };
-					showCreateDbDialog = true;
-				}}
-				class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium h-9 px-3.5"
-			>
-				<PlusIcon class="w-3.5 h-3.5 mr-1" />
-				Tambah Database
-			</Button>
-		</div>
-	</div>
-
-	<!-- Banner Notifikasi Saat Database Baru Berhasil Dibuat -->
+<div class="space-y-6 w-full">
+	<!-- Banner Notifikasi Saat Project Baru Berhasil Dibuat -->
 	{#if createdDbSuccess}
-		<Alert.Root class="rounded-2xl border border-emerald-200 bg-emerald-50/70 text-emerald-900 p-4">
+		<Alert.Root class="rounded-2xl border border-emerald-200 bg-emerald-50/80 text-emerald-950 p-4 shadow-xs">
 			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-2">
-					<CheckIcon class="w-4 h-4 text-emerald-600 shrink-0" />
+				<div class="flex items-center gap-2.5">
+					<div class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+						<CheckIcon class="w-3.5 h-3.5 text-emerald-700" />
+					</div>
 					<span class="text-xs font-medium">
-						Database <strong>"{createdDbSuccess}"</strong> berhasil dibuat di Neon Cloud! Connection string di bawah siap dipasang ke project Anda.
+						Project <strong>"{createdDbSuccess}"</strong> berhasil dibuat di Neon Cloud! Database siap digunakan.
 					</span>
 				</div>
 				<Button variant="ghost" size="sm" onclick={() => (createdDbSuccess = null)} class="text-xs text-emerald-800 h-6 px-2">
@@ -518,347 +614,693 @@
 		</Alert.Root>
 	{/if}
 
-	<!-- Card Sambungan Connection String untuk Project Baru -->
-	<Card.Root class="border border-slate-100 shadow-xs rounded-2xl bg-white p-5 space-y-3">
-		<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-			<div class="flex items-center gap-2">
-				<div class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-					<DatabaseIcon class="w-4 h-4" />
+	<!-- ========================================================================= -->
+	<!-- VIEW 1: DAFTAR LIST PROJECT (HALAMAN AWAL)                                -->
+	<!-- ========================================================================= -->
+	{#if viewMode === 'list'}
+		<!-- Header Atas: Judul & Action Buttons -->
+		<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+			<div>
+				<div class="flex items-center gap-2">
+					<h2 class="text-xl md:text-2xl font-bold tracking-tight text-slate-900">Projects & Database</h2>
+					<Badge variant="secondary" class="bg-emerald-50 text-emerald-700 border-emerald-200 font-mono text-[11px] font-bold">
+						{databases.length} Project
+					</Badge>
 				</div>
-				<div>
-					<div class="flex items-center gap-2">
-						<span class="text-xs font-bold text-slate-900">Connection String:</span>
-						<Badge variant="secondary" class="bg-emerald-50 text-emerald-700 border-0 font-mono text-[11px] font-bold">
-							{selectedStudioDb}
-						</Badge>
-					</div>
-					<p class="text-[11px] text-slate-400">Gunakan string ini di file <code>.env</code> project baru Anda untuk langsung terhubung ke database ini di Neon</p>
-				</div>
+				<p class="text-xs text-slate-500 mt-1">Kelola project Neon PostgreSQL Anda, salin connection string universal, atau klik project untuk mengelola tabel.</p>
 			</div>
 
 			<div class="flex items-center gap-2">
-				<ToggleGroup.Root type="single" value={connTab} onValueChange={(v) => { if (v) connTab = v; }} class="bg-slate-100 p-0.5 rounded-lg">
-					<ToggleGroup.Item value="env" class="text-xs font-mono px-2.5 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
-						.env
-					</ToggleGroup.Item>
-					<ToggleGroup.Item value="pooled" class="text-xs font-mono px-2.5 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
-						Pooled URI
-					</ToggleGroup.Item>
-					<ToggleGroup.Item value="direct" class="text-xs font-mono px-2.5 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
-						Direct URI
-					</ToggleGroup.Item>
-					<ToggleGroup.Item value="prisma" class="text-xs font-mono px-2.5 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
-						Prisma
-					</ToggleGroup.Item>
-				</ToggleGroup.Root>
-
-				<button
-					type="button"
-					onclick={() => (showConnPassword = !showConnPassword)}
-					class="p-2 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition cursor-pointer"
-					title={showConnPassword ? 'Sembunyikan password' : 'Lihat password'}
-				>
-					{#if showConnPassword}
-						<EyeOffIcon class="w-3.5 h-3.5" />
-					{:else}
-						<EyeIcon class="w-3.5 h-3.5" />
-					{/if}
-				</button>
-
 				<Button
-					size="sm"
 					variant="outline"
-					onclick={copyConnectionStringText}
-					class="text-xs font-medium border-slate-200 h-8"
+					size="sm"
+					disabled={isRefreshingDbs}
+					onclick={refreshDatabasesList}
+					class="text-xs font-medium border-slate-200 h-9 px-3 hover:bg-slate-50"
+					title="Refresh daftar project"
 				>
-					{#if copiedConnString}
-						<CheckIcon class="w-3.5 h-3.5 text-emerald-600 mr-1.5" />
-						<span class="text-emerald-700 font-semibold">Tersalin!</span>
-					{:else}
-						<CopyIcon class="w-3.5 h-3.5 text-slate-500 mr-1.5" />
-						<span>Salin String</span>
-					{/if}
+					<RefreshCwIcon class="w-3.5 h-3.5 mr-1.5 {isRefreshingDbs ? 'animate-spin' : ''}" />
+					<span>Refresh</span>
 				</Button>
-			</div>
-		</div>
 
-		<div class="relative bg-slate-900 text-slate-100 p-3 rounded-xl text-xs font-mono overflow-x-auto selection:bg-emerald-500 selection:text-white">
-			<code>{activeConnString}</code>
-		</div>
-	</Card.Root>
-
-	<!-- Studio Workspace: Kolom Kiri (Daftar Tabel) & Kolom Kanan (Viewer Data Dinamis) -->
-	<div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-		<!-- Kolom Kiri: Daftar Tabel di Database Terpilih -->
-		<Card.Root class="lg:col-span-3 border border-slate-100 shadow-xs rounded-2xl bg-white p-4 space-y-3">
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-1.5">
-					<TableIcon class="w-4 h-4 text-slate-500" />
-					<span class="text-xs font-bold text-slate-800">Tabel ({studioTables.length})</span>
-				</div>
 				<Button
-					variant="ghost"
 					size="sm"
 					onclick={() => {
-						newTableName = '';
-						newTableColumns = [{ name: 'name', type: 'VARCHAR(255)', nullable: false, defaultValue: '' }];
-						showCreateTableDialog = true;
+						dbFeedback = { type: '', text: '' };
+						showCreateDbDialog = true;
 					}}
-					class="text-xs text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 h-7 px-2 font-medium"
+					class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold h-9 px-4 shadow-xs"
 				>
-					<PlusIcon class="w-3 h-3 mr-1" />
-					Tabel Baru
+					<PlusIcon class="w-3.5 h-3.5 mr-1.5" />
+					Tambah Project
 				</Button>
 			</div>
+		</div>
 
-			<Input
-				type="text"
-				bind:value={searchStudioTable}
-				placeholder="Cari tabel..."
-				class="bg-slate-50/70 border-slate-200 text-xs rounded-lg h-8"
-			/>
-
-			<div class="space-y-1 max-h-[460px] overflow-y-auto pr-0.5">
-				{#if isLoadingStudio}
-					{#each [1, 2, 3] as _}
-						<Skeleton class="h-8 w-full rounded-lg" />
-					{/each}
-				{:else if filteredStudioTables.length === 0}
-					<div class="p-6 text-center text-slate-400 text-xs space-y-2">
-						<p>Belum ada tabel pada database ini.</p>
-						<Button
-							variant="outline"
-							size="sm"
-							onclick={() => {
-								newTableName = '';
-								newTableColumns = [{ name: 'name', type: 'VARCHAR(255)', nullable: false, defaultValue: '' }];
-								showCreateTableDialog = true;
-							}}
-							class="text-xs border-slate-200 mt-1"
-						>
-							+ Buat Tabel Pertama
-						</Button>
+		<!-- Card Connection String Universal (All-In-One untuk Semua Project) -->
+		<Card.Root class="border border-slate-200/80 shadow-xs rounded-2xl bg-white p-5 space-y-3.5">
+			<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+				<div class="flex items-center gap-3">
+					<div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold shadow-2xs shrink-0">
+						<GlobeIcon class="w-4.5 h-4.5" />
 					</div>
-				{:else}
-					{#each filteredStudioTables as t}
-						<button
-							type="button"
-							onclick={() => {
-								selectedTable = t.name;
-								loadTableData(selectedStudioDb, t.name);
-							}}
-							class="w-full flex items-center justify-between p-2 rounded-xl text-left transition cursor-pointer text-xs {selectedTable === t.name
-								? 'bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold'
-								: 'hover:bg-slate-50 text-slate-700 font-medium'}"
-						>
-							<div class="flex items-center gap-2 truncate">
-								<TableIcon class="w-3.5 h-3.5 {selectedTable === t.name ? 'text-emerald-600' : 'text-slate-400'}" />
-								<span class="truncate">{t.name}</span>
-							</div>
-							<Badge variant="secondary" class="text-[10px] font-mono px-1.5 py-0 bg-slate-100 text-slate-600">
-								{t.rowCount}
+					<div>
+						<div class="flex items-center gap-2">
+							<span class="text-xs font-bold text-slate-900">Universal Connection String</span>
+							<Badge class="bg-emerald-100 text-emerald-800 border-0 text-[10px] font-medium font-mono">
+								All-In-One
 							</Badge>
-						</button>
-					{/each}
-				{/if}
+							{#if customDbPassword}
+								<Badge class="bg-amber-50 text-amber-800 border-amber-200 text-[10px] font-medium">
+									Password Kustom Aktif
+								</Badge>
+							{/if}
+						</div>
+						<p class="text-[11px] text-slate-400 mt-0.5">Satu string koneksi terpusat yang bisa langsung mengakses semua database project melalui gateway URL</p>
+					</div>
+				</div>
+
+				<!-- Toolbar: Format Selector + Action Buttons -->
+				<div class="flex items-center flex-wrap gap-2">
+					<ToggleGroup.Root type="single" value={connTab} onValueChange={(v) => { if (v) connTab = v; }} class="bg-slate-100 p-0.5 rounded-lg">
+						<ToggleGroup.Item value="env" class="text-xs font-mono px-2.5 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
+							.env
+						</ToggleGroup.Item>
+						<ToggleGroup.Item value="pooled" class="text-xs font-mono px-2.5 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
+							Pooled URI
+						</ToggleGroup.Item>
+						<ToggleGroup.Item value="direct" class="text-xs font-mono px-2.5 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
+							Direct URI
+						</ToggleGroup.Item>
+						<ToggleGroup.Item value="prisma" class="text-xs font-mono px-2.5 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
+							Prisma
+						</ToggleGroup.Item>
+					</ToggleGroup.Root>
+
+					<button
+						type="button"
+						onclick={() => (showConnPassword = !showConnPassword)}
+						class="p-2 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition cursor-pointer"
+						title={showConnPassword ? 'Sembunyikan password' : 'Lihat password'}
+					>
+						{#if showConnPassword}
+							<EyeOffIcon class="w-3.5 h-3.5" />
+						{:else}
+							<EyeIcon class="w-3.5 h-3.5" />
+						{/if}
+					</button>
+
+					<Button
+						size="sm"
+						variant="outline"
+						onclick={openChangeDbPasswordModal}
+						class="text-xs font-medium border-slate-200 h-8 text-slate-700 hover:bg-slate-50"
+						title="Ubah password database jika di-rotate"
+					>
+						<KeyRoundIcon class="w-3.5 h-3.5 mr-1.5 text-slate-500" />
+						<span>Ubah Password DB</span>
+					</Button>
+
+					<Button
+						size="sm"
+						variant="outline"
+						onclick={copyUniversalConnectionString}
+						class="text-xs font-medium border-slate-200 h-8"
+					>
+						{#if copiedConnString}
+							<CheckIcon class="w-3.5 h-3.5 text-emerald-600 mr-1.5" />
+							<span class="text-emerald-700 font-semibold">Tersalin!</span>
+						{:else}
+							<CopyIcon class="w-3.5 h-3.5 text-slate-500 mr-1.5" />
+							<span>Salin String</span>
+						{/if}
+					</Button>
+				</div>
+			</div>
+
+			<!-- Code Display Box -->
+			<div class="relative bg-slate-950 text-slate-100 p-3.5 rounded-xl text-xs font-mono overflow-x-auto selection:bg-emerald-500 selection:text-white border border-slate-800">
+				<code>{universalConnString}</code>
 			</div>
 		</Card.Root>
 
-		<!-- Kolom Kanan: Viewer & Pengelola Data Tabel Dinamis -->
-		<Card.Root class="lg:col-span-9 border border-slate-100 shadow-xs rounded-2xl bg-white overflow-hidden">
-			{#if !selectedTable}
-				<div class="p-16 text-center space-y-3">
-					<TableIcon class="w-10 h-10 text-slate-300 mx-auto" />
-					<p class="text-xs text-slate-400">Pilih tabel di panel samping atau buat tabel baru untuk mulai mengelola data secara dinamis.</p>
-				</div>
-			{:else}
-				<!-- Table Header Actions -->
-				<div class="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-					<div class="flex items-center gap-2.5">
-						<div class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
-							<TableIcon class="w-4 h-4" />
-						</div>
-						<div>
-							<div class="flex items-center gap-2">
-								<span class="font-mono text-xs font-bold text-slate-900">public.{selectedTable}</span>
-								<Badge variant="secondary" class="text-[10px] font-mono">
-									{tableTotalCount} Baris
+		<!-- Toolbar Pencarian & Filter Project -->
+		<div class="flex items-center justify-between gap-3 pt-2">
+			<div class="relative w-full max-w-sm">
+				<SearchIcon class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+				<Input
+					type="text"
+					bind:value={searchProject}
+					placeholder="Cari nama project..."
+					class="bg-white border-slate-200 pl-9 text-xs rounded-xl h-9 shadow-2xs"
+				/>
+			</div>
+
+			<span class="text-xs text-slate-400 font-mono">
+				Menampilkan {filteredProjects.length} dari {databases.length} project
+			</span>
+		</div>
+
+		<!-- Grid Daftar Kartu Project -->
+		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+			{#each filteredProjects as project}
+				<div class="group relative bg-white border border-slate-200/80 hover:border-emerald-400/80 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+					<div>
+						<!-- Top Card Header: Icon & Badges -->
+						<div class="flex items-center justify-between gap-2 mb-3">
+							<div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold group-hover:scale-105 transition-transform shrink-0">
+								<FolderIcon class="w-4.5 h-4.5" />
+							</div>
+							<div class="flex items-center gap-1.5">
+								<Badge variant="outline" class="text-[10px] font-mono text-emerald-700 bg-emerald-50/80 border-emerald-200">
+									<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
+									Neon DB
 								</Badge>
 							</div>
-							<p class="text-[11px] text-slate-400">
-								Database: <strong class="text-slate-700 font-mono">{selectedStudioDb}</strong>
-								{#if primaryKeyCol}
-									• Primary Key: <strong class="text-slate-700 font-mono">{primaryKeyCol}</strong>
-								{/if}
-							</p>
+						</div>
+
+						<!-- Project Title & Details -->
+						<h3 class="text-base font-bold font-mono text-slate-900 group-hover:text-emerald-700 transition-colors tracking-tight truncate" title={project.name}>
+							{project.name}
+						</h3>
+						<p class="text-xs text-slate-400 mt-1 line-clamp-1">
+							PostgreSQL Database Project
+						</p>
+
+						<!-- Metrics / Specs -->
+						<div class="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-[11px] font-mono text-slate-500">
+							<span class="bg-slate-100/80 px-2 py-0.5 rounded-md">
+								Size: <strong class="text-slate-800">{project.size || '0 kB'}</strong>
+							</span>
+							<span class="bg-slate-100/80 px-2 py-0.5 rounded-md">
+								Encoding: <strong class="text-slate-800">{project.encoding || 'UTF8'}</strong>
+							</span>
 						</div>
 					</div>
 
-					<div class="flex items-center gap-1.5">
-						<Button
-							size="sm"
-							onclick={openInsertRowModal}
-							class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium h-8"
-						>
-							<PlusIcon class="w-3.5 h-3.5 mr-1" />
-							Tambah Baris
-						</Button>
-
+					<!-- Bottom Action Buttons -->
+					<div class="flex items-center gap-2 mt-5 pt-3 border-t border-slate-100">
 						<Button
 							variant="outline"
 							size="sm"
-							onclick={() => (showAddColumnDialog = true)}
-							class="text-xs font-medium border-slate-200 h-8"
+							onclick={() => copyProjectCardString(project.name)}
+							class="text-xs font-medium border-slate-200 text-slate-600 hover:text-slate-900 h-8 flex-1"
+							title="Salin connection string project ini"
 						>
-							+ Tambah Kolom
+							{#if copiedProjectCard === project.name}
+								<CheckIcon class="w-3.5 h-3.5 text-emerald-600 mr-1" />
+								<span class="text-emerald-700 font-semibold">Tersalin</span>
+							{:else}
+								<CopyIcon class="w-3.5 h-3.5 text-slate-400 mr-1" />
+								<span>Salin URI</span>
+							{/if}
 						</Button>
 
 						<Button
-							variant="ghost"
 							size="sm"
-							onclick={() => loadTableData(selectedStudioDb, selectedTable)}
-							class="text-xs text-slate-600 hover:text-slate-900 h-8 px-2"
-							title="Refresh isi tabel"
+							onclick={() => openProjectDetail(project.name)}
+							class="text-xs bg-slate-900 hover:bg-emerald-600 text-white font-medium h-8 flex-1 transition-colors"
 						>
-							<RefreshCwIcon class="w-3.5 h-3.5 {isLoadingTableData ? 'animate-spin' : ''}" />
-						</Button>
-
-						<Button
-							variant="ghost"
-							size="sm"
-							onclick={() => (showDropTableConfirm = true)}
-							class="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 px-2"
-							title="Hapus tabel ini"
-						>
-							<TrashIcon class="w-3.5 h-3.5" />
+							<span>Buka Tabel</span>
+							<ArrowRightIcon class="w-3.5 h-3.5 ml-1" />
 						</Button>
 					</div>
 				</div>
+			{/each}
+		</div>
 
-				<!-- Dynamic Table Data Container -->
-				{#if isLoadingTableData}
-					<div class="p-8 space-y-3">
-						<Skeleton class="h-4 w-48 rounded" />
-						<Skeleton class="h-40 w-full rounded-xl" />
+		<!-- Empty State Jika Pencarian Tidak Ada Hasil -->
+		{#if filteredProjects.length === 0}
+			<div class="p-12 text-center bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+				<FolderIcon class="w-10 h-10 text-slate-300 mx-auto" />
+				<h4 class="text-sm font-bold text-slate-800">Tidak ada project yang cocok</h4>
+				<p class="text-xs text-slate-400 max-w-sm mx-auto">
+					{#if searchProject}
+						Tidak ditemukan project dengan nama "{searchProject}". Coba kata kunci lain atau buat project baru.
+					{:else}
+						Belum ada project database di Neon Cloud. Klik tombol di bawah untuk membuat project pertama Anda.
+					{/if}
+				</p>
+				<Button
+					size="sm"
+					onclick={() => {
+						searchProject = '';
+						showCreateDbDialog = true;
+					}}
+					class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white mt-2"
+				>
+					<PlusIcon class="w-3.5 h-3.5 mr-1" />
+					Tambah Project Baru
+				</Button>
+			</div>
+		{/if}
+
+	<!-- ========================================================================= -->
+	<!-- VIEW 2: DETAIL PROJECT & TABLE EXPLORER (SETELAH PROJECT DIKLIK)         -->
+	<!-- ========================================================================= -->
+	{:else if viewMode === 'detail'}
+		<!-- Header Atas: Tombol Kembali, Breadcrumb & Switcher -->
+		<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+			<div class="flex items-center gap-2.5 flex-wrap">
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={backToProjectsList}
+					class="text-xs font-semibold border-slate-200 h-9 px-3 hover:bg-slate-100 text-slate-700"
+				>
+					<ArrowLeftIcon class="w-3.5 h-3.5 mr-1.5" />
+					Kembali ke Daftar Project
+				</Button>
+
+				<span class="text-slate-300">/</span>
+
+				<div class="flex items-center gap-2">
+					<span class="text-xs text-slate-400 font-medium">Project:</span>
+					<Badge class="bg-emerald-50 text-emerald-900 border border-emerald-200 font-mono text-xs font-bold px-2.5 py-0.5">
+						<FolderIcon class="w-3.5 h-3.5 text-emerald-600 mr-1.5" />
+						{selectedStudioDb}
+					</Badge>
+				</div>
+			</div>
+
+			<div class="flex items-center gap-2">
+				<!-- Dropdown Switcher Cepat Antar Project -->
+				<div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl p-1 shadow-xs">
+					<DatabaseIcon class="w-3.5 h-3.5 text-slate-400 ml-2 shrink-0" />
+					<div class="w-40">
+						<Combobox
+							bind:value={selectedStudioDb}
+							options={databases.map((db) => ({ value: db.name, label: db.name }))}
+							placeholder="Ganti Project..."
+							class="border-0 bg-transparent py-1 text-xs font-mono font-bold"
+						/>
+					</div>
+				</div>
+
+				<Button
+					variant="outline"
+					size="sm"
+					disabled={isLoadingStudio}
+					onclick={() => loadStudioTables(selectedStudioDb)}
+					class="text-xs font-medium border-slate-200 h-9 px-3"
+					title="Refresh data tabel"
+				>
+					<RefreshCwIcon class="w-3.5 h-3.5 {isLoadingStudio ? 'animate-spin' : ''}" />
+				</Button>
+
+				<Button
+					size="sm"
+					onclick={() => {
+						dbFeedback = { type: '', text: '' };
+						showCreateDbDialog = true;
+					}}
+					class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium h-9 px-3.5"
+				>
+					<PlusIcon class="w-3.5 h-3.5 mr-1" />
+					Tambah Project
+				</Button>
+			</div>
+		</div>
+
+		<!-- Card Connection String Khusus Project Ini -->
+		<Card.Root class="border border-slate-200/80 shadow-xs rounded-2xl bg-white p-5 space-y-3">
+			<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+				<div class="flex items-center gap-3">
+					<div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold shrink-0">
+						<DatabaseIcon class="w-4 h-4" />
+					</div>
+					<div>
+						<div class="flex items-center gap-2">
+							<span class="text-xs font-bold text-slate-900">Connection String:</span>
+							<Badge variant="secondary" class="bg-emerald-50 text-emerald-800 border-0 font-mono text-[11px] font-bold">
+								{connScope === 'universal' ? 'Universal (All-in-One)' : `Khusus: ${selectedStudioDb}`}
+							</Badge>
+							{#if customDbPassword}
+								<Badge class="bg-amber-50 text-amber-800 border-amber-200 text-[10px] font-medium">
+									Password Kustom
+								</Badge>
+							{/if}
+						</div>
+						<p class="text-[11px] text-slate-400 mt-0.5">
+							{connScope === 'universal'
+								? 'Mode Universal: Satu string koneksi untuk semua database via gateway'
+								: `Mode Khusus: Terhubung langsung dan terisolasi ke database "${selectedStudioDb}"`}
+						</p>
+					</div>
+				</div>
+
+				<!-- Toolbar: Scope Toggle + Format Tabs + Actions -->
+				<div class="flex items-center flex-wrap gap-2">
+					<!-- Pilihan Mode: Khusus Project vs Universal All-In -->
+					<ToggleGroup.Root type="single" value={connScope} onValueChange={(v) => { if (v) connScope = v; }} class="bg-slate-100 p-0.5 rounded-lg">
+						<ToggleGroup.Item value="project" class="text-xs font-medium px-2.5 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
+							Khusus Project
+						</ToggleGroup.Item>
+						<ToggleGroup.Item value="universal" class="text-xs font-medium px-2.5 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
+							Universal All-In
+						</ToggleGroup.Item>
+					</ToggleGroup.Root>
+
+					<div class="h-4 w-px bg-slate-200 hidden sm:block"></div>
+
+					<!-- Format Tabs: .env / pooled / direct / prisma -->
+					<ToggleGroup.Root type="single" value={connTab} onValueChange={(v) => { if (v) connTab = v; }} class="bg-slate-100 p-0.5 rounded-lg">
+						<ToggleGroup.Item value="env" class="text-xs font-mono px-2 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
+							.env
+						</ToggleGroup.Item>
+						<ToggleGroup.Item value="pooled" class="text-xs font-mono px-2 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
+							Pooled
+						</ToggleGroup.Item>
+						<ToggleGroup.Item value="direct" class="text-xs font-mono px-2 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
+							Direct
+						</ToggleGroup.Item>
+						<ToggleGroup.Item value="prisma" class="text-xs font-mono px-2 py-1 rounded-md data-[state=on]:bg-white data-[state=on]:text-slate-900 data-[state=on]:shadow-2xs">
+							Prisma
+						</ToggleGroup.Item>
+					</ToggleGroup.Root>
+
+					<button
+						type="button"
+						onclick={() => (showConnPassword = !showConnPassword)}
+						class="p-2 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition cursor-pointer"
+						title={showConnPassword ? 'Sembunyikan password' : 'Lihat password'}
+					>
+						{#if showConnPassword}
+							<EyeOffIcon class="w-3.5 h-3.5" />
+						{:else}
+							<EyeIcon class="w-3.5 h-3.5" />
+						{/if}
+					</button>
+
+					<Button
+						size="sm"
+						variant="outline"
+						onclick={openChangeDbPasswordModal}
+						class="text-xs font-medium border-slate-200 h-8 text-slate-700 hover:bg-slate-50"
+						title="Ubah password database jika di-rotate"
+					>
+						<KeyRoundIcon class="w-3.5 h-3.5 mr-1 text-slate-500" />
+						<span>Ubah Password DB</span>
+					</Button>
+
+					<Button
+						size="sm"
+						variant="outline"
+						onclick={copyDetailConnectionString}
+						class="text-xs font-medium border-slate-200 h-8"
+					>
+						{#if copiedConnString}
+							<CheckIcon class="w-3.5 h-3.5 text-emerald-600 mr-1.5" />
+							<span class="text-emerald-700 font-semibold">Tersalin!</span>
+						{:else}
+							<CopyIcon class="w-3.5 h-3.5 text-slate-500 mr-1.5" />
+							<span>Salin String</span>
+						{/if}
+					</Button>
+				</div>
+			</div>
+
+			<div class="relative bg-slate-950 text-slate-100 p-3.5 rounded-xl text-xs font-mono overflow-x-auto selection:bg-emerald-500 selection:text-white border border-slate-800">
+				<code>{activeDetailConnString}</code>
+			</div>
+		</Card.Root>
+
+		<!-- Workspace Studio: Kolom Kiri (Tabel) & Kolom Kanan (Viewer Data) -->
+		<div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+			<!-- Kolom Kiri: Daftar Tabel di Project Terpilih -->
+			<Card.Root class="lg:col-span-3 border border-slate-200/80 shadow-xs rounded-2xl bg-white p-4 space-y-3">
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-1.5">
+						<TableIcon class="w-4 h-4 text-slate-500" />
+						<span class="text-xs font-bold text-slate-800">Tabel ({studioTables.length})</span>
+					</div>
+					<Button
+						variant="ghost"
+						size="sm"
+						onclick={() => {
+							newTableName = '';
+							newTableColumns = [{ name: 'name', type: 'VARCHAR(255)', nullable: false, defaultValue: '' }];
+							showCreateTableDialog = true;
+						}}
+						class="text-xs text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 h-7 px-2 font-medium"
+					>
+						<PlusIcon class="w-3 h-3 mr-1" />
+						Tabel Baru
+					</Button>
+				</div>
+
+				<Input
+					type="text"
+					bind:value={searchStudioTable}
+					placeholder="Cari tabel..."
+					class="bg-slate-50/70 border-slate-200 text-xs rounded-lg h-8"
+				/>
+
+				<div class="space-y-1 max-h-[460px] overflow-y-auto pr-0.5">
+					{#if isLoadingStudio}
+						{#each [1, 2, 3] as _}
+							<Skeleton class="h-8 w-full rounded-lg" />
+						{/each}
+					{:else if filteredStudioTables.length === 0}
+						<div class="p-6 text-center text-slate-400 text-xs space-y-2">
+							<p>Belum ada tabel pada project ini.</p>
+							<Button
+								variant="outline"
+								size="sm"
+								onclick={() => {
+									newTableName = '';
+									newTableColumns = [{ name: 'name', type: 'VARCHAR(255)', nullable: false, defaultValue: '' }];
+									showCreateTableDialog = true;
+								}}
+								class="text-xs border-slate-200 mt-1"
+							>
+								+ Buat Tabel Pertama
+							</Button>
+						</div>
+					{:else}
+						{#each filteredStudioTables as t}
+							<button
+								type="button"
+								onclick={() => {
+									selectedTable = t.name;
+									loadTableData(selectedStudioDb, t.name);
+								}}
+								class="w-full flex items-center justify-between p-2 rounded-xl text-left transition cursor-pointer text-xs {selectedTable === t.name
+									? 'bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold'
+									: 'hover:bg-slate-50 text-slate-700 font-medium'}"
+							>
+								<div class="flex items-center gap-2 truncate">
+									<TableIcon class="w-3.5 h-3.5 {selectedTable === t.name ? 'text-emerald-600' : 'text-slate-400'}" />
+									<span class="truncate">{t.name}</span>
+								</div>
+								<Badge variant="secondary" class="text-[10px] font-mono px-1.5 py-0 bg-slate-100 text-slate-600">
+									{t.rowCount}
+								</Badge>
+							</button>
+						{/each}
+					{/if}
+				</div>
+			</Card.Root>
+
+			<!-- Kolom Kanan: Viewer & Pengelola Data Tabel Dinamis -->
+			<Card.Root class="lg:col-span-9 border border-slate-200/80 shadow-xs rounded-2xl bg-white overflow-hidden">
+				{#if !selectedTable}
+					<div class="p-16 text-center space-y-3">
+						<TableIcon class="w-10 h-10 text-slate-300 mx-auto" />
+						<p class="text-xs text-slate-400">Pilih tabel di panel samping atau buat tabel baru untuk mulai mengelola data secara dinamis.</p>
 					</div>
 				{:else}
-					<ScrollArea class="max-h-[500px] w-full overflow-x-auto">
-						<Table.Root>
-							<Table.Header class="bg-slate-50/70 border-b border-slate-100">
-								<Table.Row>
-									<Table.Head class="w-12 font-mono text-[11px] text-slate-400">#</Table.Head>
-									{#each tableColumns as col}
-										<Table.Head class="text-xs font-mono font-bold text-slate-800 whitespace-nowrap">
-											<div class="flex items-center gap-1.5">
-												{#if col.isPrimary}
-													<KeyIcon class="w-3 h-3 text-amber-500 shrink-0" />
-												{/if}
-												<span>{col.name}</span>
-												<span class="text-[10px] font-normal text-slate-400">({col.type})</span>
-											</div>
-										</Table.Head>
-									{/each}
-									<!-- Kolom Terhubung Database -->
-									<Table.Head class="text-xs font-mono font-bold text-emerald-800 bg-emerald-50/60 uppercase whitespace-nowrap">
-										DATABASE
-									</Table.Head>
-									<Table.Head class="text-right text-xs font-medium text-slate-500 w-16">
-										AKSI
-									</Table.Head>
-								</Table.Row>
-							</Table.Header>
+					<!-- Table Header Actions -->
+					<div class="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+						<div class="flex items-center gap-2.5">
+							<div class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+								<TableIcon class="w-4 h-4" />
+							</div>
+							<div>
+								<div class="flex items-center gap-2">
+									<span class="font-mono text-xs font-bold text-slate-900">public.{selectedTable}</span>
+									<Badge variant="secondary" class="text-[10px] font-mono">
+										{tableTotalCount} Baris
+									</Badge>
+								</div>
+								<p class="text-[11px] text-slate-400">
+									Project: <strong class="text-slate-700 font-mono">{selectedStudioDb}</strong>
+									{#if primaryKeyCol}
+										• Primary Key: <strong class="text-slate-700 font-mono">{primaryKeyCol}</strong>
+									{/if}
+								</p>
+							</div>
+						</div>
 
-							<Table.Body>
-								{#if tableRows.length === 0}
+						<div class="flex items-center gap-1.5">
+							<Button
+								size="sm"
+								onclick={openInsertRowModal}
+								class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium h-8"
+							>
+								<PlusIcon class="w-3.5 h-3.5 mr-1" />
+								Tambah Baris
+							</Button>
+
+							<Button
+								variant="outline"
+								size="sm"
+								onclick={() => (showAddColumnDialog = true)}
+								class="text-xs font-medium border-slate-200 h-8"
+							>
+								+ Tambah Kolom
+							</Button>
+
+							<Button
+								variant="ghost"
+								size="sm"
+								onclick={() => loadTableData(selectedStudioDb, selectedTable)}
+								class="text-xs text-slate-600 hover:text-slate-900 h-8 px-2"
+								title="Refresh isi tabel"
+							>
+								<RefreshCwIcon class="w-3.5 h-3.5 {isLoadingTableData ? 'animate-spin' : ''}" />
+							</Button>
+
+							<Button
+								variant="ghost"
+								size="sm"
+								onclick={() => (showDropTableConfirm = true)}
+								class="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 px-2"
+								title="Hapus tabel ini"
+							>
+								<TrashIcon class="w-3.5 h-3.5" />
+							</Button>
+						</div>
+					</div>
+
+					<!-- Dynamic Table Data Container -->
+					{#if isLoadingTableData}
+						<div class="p-8 space-y-3">
+							<Skeleton class="h-4 w-48 rounded" />
+							<Skeleton class="h-40 w-full rounded-xl" />
+						</div>
+					{:else}
+						<ScrollArea class="max-h-[500px] w-full overflow-x-auto">
+							<Table.Root>
+								<Table.Header class="bg-slate-50/70 border-b border-slate-100">
 									<Table.Row>
-										<Table.Cell colspan={tableColumns.length + 3} class="text-center py-12 text-xs text-slate-400">
-											Tabel ini belum memiliki data baris. Klik tombol "+ Tambah Baris" di atas atau isi melalui project baru Anda.
-										</Table.Cell>
-									</Table.Row>
-								{:else}
-									{#each tableRows as row, idx}
-										<Table.Row class="hover:bg-slate-50/60">
-											<Table.Cell class="font-mono text-xs text-slate-400">{idx + 1}</Table.Cell>
-											{#each tableColumns as col}
-												<Table.Cell class="text-xs font-mono whitespace-nowrap">
-													{#if row[col.name] === null || row[col.name] === undefined}
-														<span class="text-slate-300 italic">null</span>
-													{:else if typeof row[col.name] === 'boolean'}
-														<Badge variant={row[col.name] ? 'secondary' : 'outline'} class="text-[10px] {row[col.name] ? 'bg-emerald-50 text-emerald-700 border-0' : 'text-slate-500'}">
-															{row[col.name] ? 'true' : 'false'}
-														</Badge>
-													{:else if col.type.toLowerCase().includes('timestamp') || col.type.toLowerCase().includes('date')}
-														<span class="text-slate-600">
-															{new Date(row[col.name]).toLocaleString('id-ID')}
-														</span>
-													{:else if typeof row[col.name] === 'object'}
-														<span class="text-slate-600 truncate max-w-xs block font-mono text-[11px]" title={JSON.stringify(row[col.name])}>
-															{JSON.stringify(row[col.name])}
-														</span>
-													{:else}
-														<span class="text-slate-900 font-medium">
-															{String(row[col.name])}
-														</span>
+										<Table.Head class="w-12 font-mono text-[11px] text-slate-400">#</Table.Head>
+										{#each tableColumns as col}
+											<Table.Head class="text-xs font-mono font-bold text-slate-800 whitespace-nowrap">
+												<div class="flex items-center gap-1.5">
+													{#if col.isPrimary}
+														<KeyIcon class="w-3 h-3 text-amber-500 shrink-0" />
 													{/if}
-												</Table.Cell>
-											{/each}
+													<span>{col.name}</span>
+													<span class="text-[10px] font-normal text-slate-400">({col.type})</span>
+												</div>
+											</Table.Head>
+										{/each}
+										<!-- Kolom Terhubung Project Database -->
+										<Table.Head class="text-xs font-mono font-bold text-emerald-800 bg-emerald-50/60 uppercase whitespace-nowrap">
+											PROJECT
+										</Table.Head>
+										<Table.Head class="text-right text-xs font-medium text-slate-500 w-16">
+											AKSI
+										</Table.Head>
+									</Table.Row>
+								</Table.Header>
 
-											<!-- Kolom Terhubung Database -->
-											<Table.Cell class="text-xs font-mono whitespace-nowrap">
-												<Badge variant="outline" class="font-mono text-[10px] text-emerald-700 bg-emerald-50/80 border-emerald-200">
-													<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
-													{selectedStudioDb}
-												</Badge>
-											</Table.Cell>
-
-											<!-- Kolom Aksi Hapus Baris -->
-											<Table.Cell class="text-right">
-												<Button
-													variant="ghost"
-													size="sm"
-													onclick={() => handleDeleteRow(primaryKeyCol, row[primaryKeyCol])}
-													class="text-xs text-rose-500 hover:text-rose-700 hover:bg-rose-50 h-7 px-2"
-													title="Hapus baris ini"
-												>
-													<TrashIcon class="w-3.5 h-3.5" />
-												</Button>
+								<Table.Body>
+									{#if tableRows.length === 0}
+										<Table.Row>
+											<Table.Cell colspan={tableColumns.length + 3} class="text-center py-12 text-xs text-slate-400">
+												Tabel ini belum memiliki data baris. Klik tombol "+ Tambah Baris" di atas atau isi melalui project baru Anda.
 											</Table.Cell>
 										</Table.Row>
-									{/each}
-								{/if}
-							</Table.Body>
-						</Table.Root>
-					</ScrollArea>
+									{:else}
+										{#each tableRows as row, idx}
+											<Table.Row class="hover:bg-slate-50/60">
+												<Table.Cell class="font-mono text-xs text-slate-400">{idx + 1}</Table.Cell>
+												{#each tableColumns as col}
+													<Table.Cell class="text-xs font-mono whitespace-nowrap">
+														{#if row[col.name] === null || row[col.name] === undefined}
+															<span class="text-slate-300 italic">null</span>
+														{:else if typeof row[col.name] === 'boolean'}
+															<Badge variant={row[col.name] ? 'secondary' : 'outline'} class="text-[10px] {row[col.name] ? 'bg-emerald-50 text-emerald-700 border-0' : 'text-slate-500'}">
+																{row[col.name] ? 'true' : 'false'}
+															</Badge>
+														{:else if col.type.toLowerCase().includes('timestamp') || col.type.toLowerCase().includes('date')}
+															<span class="text-slate-600">
+																{new Date(row[col.name]).toLocaleString('id-ID')}
+															</span>
+														{:else if typeof row[col.name] === 'object'}
+															<span class="text-slate-600 truncate max-w-xs block font-mono text-[11px]" title={JSON.stringify(row[col.name])}>
+																{JSON.stringify(row[col.name])}
+															</span>
+														{:else}
+															<span class="text-slate-900 font-medium">
+																{String(row[col.name])}
+															</span>
+														{/if}
+													</Table.Cell>
+												{/each}
+
+												<!-- Kolom Project Database -->
+												<Table.Cell class="text-xs font-mono whitespace-nowrap">
+													<Badge variant="outline" class="font-mono text-[10px] text-emerald-700 bg-emerald-50/80 border-emerald-200">
+														<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+														{selectedStudioDb}
+													</Badge>
+												</Table.Cell>
+
+												<!-- Kolom Aksi Hapus Baris -->
+												<Table.Cell class="text-right">
+													<Button
+														variant="ghost"
+														size="sm"
+														onclick={() => handleDeleteRow(primaryKeyCol, row[primaryKeyCol])}
+														class="text-xs text-rose-500 hover:text-rose-700 hover:bg-rose-50 h-7 px-2"
+														title="Hapus baris ini"
+													>
+														<TrashIcon class="w-3.5 h-3.5" />
+													</Button>
+												</Table.Cell>
+											</Table.Row>
+										{/each}
+									{/if}
+								</Table.Body>
+							</Table.Root>
+						</ScrollArea>
+					{/if}
 				{/if}
-			{/if}
-		</Card.Root>
-	</div>
+			</Card.Root>
+		</div>
+	{/if}
 </div>
 
 <!-- ============================================== -->
-<!-- DIALOG: BUAT DATABASE BARU                     -->
+<!-- DIALOG: TAMBAH PROJECT BARU                    -->
 <!-- ============================================== -->
 <Dialog.Root bind:open={showCreateDbDialog}>
-	<Dialog.Content class="sm:max-w-md bg-white border border-slate-100 shadow-xl rounded-2xl p-6">
+	<Dialog.Content class="sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl p-6">
 		<Dialog.Header class="space-y-1">
-			<Dialog.Title class="text-base font-bold text-slate-900">Buat Database Baru</Dialog.Title>
-			<Dialog.Description class="text-xs text-slate-400">
-				Database baru akan dibuat secara instan di PostgreSQL Neon Cloud.
+			<Dialog.Title class="text-base font-bold text-slate-900 flex items-center gap-2">
+				<FolderIcon class="w-4 h-4 text-emerald-600" />
+				<span>Tambah Project Baru</span>
+			</Dialog.Title>
+			<Dialog.Description class="text-xs text-slate-500">
+				Project database baru akan dibuat secara instan di PostgreSQL Neon Cloud dan langsung siap digunakan.
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<form onsubmit={handleCreateDatabase} class="space-y-4 pt-2">
+		<form onsubmit={handleCreateProject} class="space-y-4 pt-2">
 			<div>
-				<label for="dialog-db-name" class="block text-xs font-medium text-slate-700 mb-1.5">Nama Database</label>
+				<label for="dialog-db-name" class="block text-xs font-medium text-slate-700 mb-1.5">Nama Project / Database</label>
 				<Input
 					id="dialog-db-name"
 					type="text"
 					bind:value={newDbName}
 					required
-					placeholder="contoh: project_db_prod"
+					placeholder="contoh: website_masdan, toko_online, blog_api"
 					class="bg-slate-50/70 border-slate-200 text-xs font-mono rounded-lg"
 				/>
-				<span class="text-[11px] text-slate-400 mt-1 block">Hanya boleh huruf, angka, dan underscore (_).</span>
+				<span class="text-[11px] text-slate-400 mt-1 block">Gunakan huruf kecil, angka, atau underscore (_).</span>
 			</div>
 
 			{#if dbFeedback.text}
@@ -881,8 +1323,80 @@
 					disabled={isCreatingDb}
 					class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
 				>
-					{isCreatingDb ? 'Membuat...' : 'Buat Database'}
+					{isCreatingDb ? 'Membuat...' : '+ Buat Project'}
 				</Button>
+			</div>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- ============================================== -->
+<!-- DIALOG: UBAH PASSWORD DATABASE CONNECTION STR  -->
+<!-- ============================================== -->
+<Dialog.Root bind:open={showChangeDbPasswordModal}>
+	<Dialog.Content class="sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl p-6">
+		<Dialog.Header class="space-y-1">
+			<Dialog.Title class="text-base font-bold text-slate-900 flex items-center gap-2">
+				<KeyRoundIcon class="w-4 h-4 text-emerald-600" />
+				<span>Ubah Password Database</span>
+			</Dialog.Title>
+			<Dialog.Description class="text-xs text-slate-500">
+				Jika Anda mengubah atau merotasi password database di Neon Console, masukkan password baru di sini agar semua connection string ter-update.
+			</Dialog.Description>
+		</Dialog.Header>
+
+		<form onsubmit={handleSaveCustomPassword} class="space-y-4 pt-2">
+			<div>
+				<label for="custom-db-pw" class="block text-xs font-medium text-slate-700 mb-1.5">Password Database Baru</label>
+				<div class="relative">
+					<Input
+						id="custom-db-pw"
+						type={showModalPassword ? 'text' : 'password'}
+						bind:value={inputCustomPassword}
+						placeholder="Masukkan password database..."
+						class="bg-slate-50/70 border-slate-200 text-xs font-mono rounded-lg pr-10"
+					/>
+					<button
+						type="button"
+						onclick={() => (showModalPassword = !showModalPassword)}
+						class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition"
+					>
+						{#if showModalPassword}
+							<EyeOffIcon class="w-3.5 h-3.5" />
+						{:else}
+							<EyeIcon class="w-3.5 h-3.5" />
+						{/if}
+					</button>
+				</div>
+				<span class="text-[11px] text-slate-400 mt-1 block">Password ini akan disisipkan ke dalam Connection String yang disalin.</span>
+			</div>
+
+			<div class="pt-3 flex items-center justify-between gap-2 border-t border-slate-100">
+				<Button
+					type="button"
+					variant="ghost"
+					onclick={handleResetDefaultPassword}
+					class="text-xs text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-8 px-2"
+				>
+					Reset ke Default (.env)
+				</Button>
+
+				<div class="flex items-center gap-2">
+					<Button
+						type="button"
+						variant="ghost"
+						onclick={() => (showChangeDbPasswordModal = false)}
+						class="text-xs text-slate-600 hover:text-slate-900 h-8"
+					>
+						Batal
+					</Button>
+					<Button
+						type="submit"
+						class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium h-8"
+					>
+						Simpan Password
+					</Button>
+				</div>
 			</div>
 		</form>
 	</Dialog.Content>
@@ -892,11 +1406,11 @@
 <!-- DIALOG: BUAT TABEL BARU                        -->
 <!-- ============================================== -->
 <Dialog.Root bind:open={showCreateTableDialog}>
-	<Dialog.Content class="sm:max-w-xl bg-white border border-slate-100 shadow-xl rounded-2xl p-6">
+	<Dialog.Content class="sm:max-w-xl bg-white border border-slate-200 shadow-xl rounded-2xl p-6">
 		<Dialog.Header class="space-y-1">
 			<Dialog.Title class="text-base font-bold text-slate-900">Buat Tabel Baru</Dialog.Title>
 			<Dialog.Description class="text-xs text-slate-400">
-				Tabel baru akan dibuat pada database <strong class="text-slate-800 font-mono">{selectedStudioDb}</strong> di Neon Cloud.
+				Tabel baru akan dibuat pada database project <strong class="text-slate-800 font-mono">{selectedStudioDb}</strong> di Neon Cloud.
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -1014,11 +1528,11 @@
 <!-- DIALOG: TAMBAH BARIS DATA                      -->
 <!-- ============================================== -->
 <Dialog.Root bind:open={showInsertRowDialog}>
-	<Dialog.Content class="sm:max-w-md bg-white border border-slate-100 shadow-xl rounded-2xl p-6">
+	<Dialog.Content class="sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl p-6">
 		<Dialog.Header class="space-y-1">
 			<Dialog.Title class="text-base font-bold text-slate-900">Tambah Baris Baru</Dialog.Title>
 			<Dialog.Description class="text-xs text-slate-400">
-				Masukkan nilai data untuk tabel <strong class="text-slate-800 font-mono">public.{selectedTable}</strong> pada database <strong class="text-slate-800 font-mono">{selectedStudioDb}</strong>.
+				Masukkan nilai data untuk tabel <strong class="text-slate-800 font-mono">public.{selectedTable}</strong> pada project <strong class="text-slate-800 font-mono">{selectedStudioDb}</strong>.
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -1082,11 +1596,11 @@
 <!-- DIALOG: TAMBAH KOLOM BARU                      -->
 <!-- ============================================== -->
 <Dialog.Root bind:open={showAddColumnDialog}>
-	<Dialog.Content class="sm:max-w-md bg-white border border-slate-100 shadow-xl rounded-2xl p-6">
+	<Dialog.Content class="sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl p-6">
 		<Dialog.Header class="space-y-1">
 			<Dialog.Title class="text-base font-bold text-slate-900">Tambah Kolom Baru</Dialog.Title>
 			<Dialog.Description class="text-xs text-slate-400">
-				Tambahkan kolom baru ke tabel <strong class="text-slate-800 font-mono">public.{selectedTable}</strong> pada database <strong class="text-slate-800 font-mono">{selectedStudioDb}</strong>.
+				Tambahkan kolom baru ke tabel <strong class="text-slate-800 font-mono">public.{selectedTable}</strong> pada project <strong class="text-slate-800 font-mono">{selectedStudioDb}</strong>.
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -1156,11 +1670,11 @@
 <!-- ALERT DIALOG: KONFIRMASI HAPUS TABEL           -->
 <!-- ============================================== -->
 <AlertDialog.Root bind:open={showDropTableConfirm}>
-	<AlertDialog.Content class="sm:max-w-md bg-white border border-slate-100 shadow-xl rounded-2xl p-6">
+	<AlertDialog.Content class="sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl p-6">
 		<AlertDialog.Header class="space-y-1">
 			<AlertDialog.Title class="text-base font-bold text-slate-900">Hapus Tabel Ini?</AlertDialog.Title>
 			<AlertDialog.Description class="text-xs text-slate-400">
-				Apakah Anda yakin ingin menghapus tabel <strong>public.{selectedTable}</strong> dari database <strong>{selectedStudioDb}</strong>? Seluruh data di dalamnya akan terhapus secara permanen.
+				Apakah Anda yakin ingin menghapus tabel <strong>public.{selectedTable}</strong> dari project <strong>{selectedStudioDb}</strong>? Seluruh data di dalamnya akan terhapus secara permanen.
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 
@@ -1178,4 +1692,3 @@
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>
-

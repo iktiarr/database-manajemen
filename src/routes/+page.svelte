@@ -3,6 +3,7 @@
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import AppSidebar from '$lib/components/layout/AppSidebar.svelte';
 	import LogoutDialog from '$lib/components/layout/LogoutDialog.svelte';
+	import ChangeAdminPasswordDialog from '$lib/components/layout/ChangeAdminPasswordDialog.svelte';
 	import DatabaseStudio from '$lib/components/studio/DatabaseStudio.svelte';
 	import QueryConsole from '$lib/components/query/QueryConsole.svelte';
 	import AdminManager from '$lib/components/admins/AdminManager.svelte';
@@ -25,6 +26,9 @@
 
 	// Logout dialog state
 	let showLogoutConfirm = $state(false);
+
+	// Change admin password dialog state
+	let showChangePasswordDialog = $state(false);
 
 	// Databases & Admins reactive state
 	let databases = $state([]);
@@ -60,6 +64,7 @@
 			currentAdmin={data?.currentAdmin}
 			onTabChange={setActiveTab}
 			onLogoutClick={() => (showLogoutConfirm = true)}
+			onChangePasswordClick={() => (showChangePasswordDialog = true)}
 		/>
 
 		<!-- Main Inset Content Area -->
@@ -98,3 +103,9 @@
 
 <!-- Konfirmasi Keluar Dialog -->
 <LogoutDialog bind:open={showLogoutConfirm} />
+
+<!-- Ubah Password Admin Dialog -->
+<ChangeAdminPasswordDialog
+	bind:open={showChangePasswordDialog}
+	currentAdmin={data?.currentAdmin}
+/>

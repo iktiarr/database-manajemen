@@ -12,7 +12,8 @@
 		activeTab = 'databases',
 		currentAdmin = null,
 		onTabChange = () => {},
-		onLogoutClick = () => {}
+		onLogoutClick = () => {},
+		onChangePasswordClick = () => {}
 	} = $props();
 
 	function getInitials(email = '') {
@@ -53,7 +54,7 @@
 							: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}"
 					>
 						<DatabaseIcon class="w-3.5 h-3.5 {activeTab === 'databases' ? 'text-white' : 'text-slate-400'}" />
-						<span>Databases</span>
+						<span>Projects</span>
 					</Sidebar.MenuButton>
 				</Sidebar.MenuItem>
 
@@ -118,14 +119,26 @@
 				</div>
 			</div>
 
-			<Button
-				variant="ghost"
-				size="sm"
-				onclick={onLogoutClick}
-				class="text-xs text-slate-500 hover:text-rose-600 hover:bg-rose-50 h-7 px-2"
-			>
-				Keluar
-			</Button>
+			<div class="flex items-center gap-1 shrink-0">
+				<Button
+					variant="ghost"
+					size="sm"
+					onclick={onChangePasswordClick}
+					class="text-xs text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 h-7 w-7 p-0 rounded-lg"
+					title="Ubah Password Admin"
+				>
+					<KeyIcon class="w-3.5 h-3.5" />
+				</Button>
+
+				<Button
+					variant="ghost"
+					size="sm"
+					onclick={onLogoutClick}
+					class="text-xs text-slate-500 hover:text-rose-600 hover:bg-rose-50 h-7 px-2 rounded-lg"
+				>
+					Keluar
+				</Button>
+			</div>
 		</div>
 	</Sidebar.Footer>
 </Sidebar.Root>
