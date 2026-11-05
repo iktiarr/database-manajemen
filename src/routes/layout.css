@@ -68,3 +68,14 @@ body {
 	color: var(--foreground);
 	font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
+
+/* Sembunyikan scrollbar di semua browser dan komponen secara global */
+* {
+	scrollbar-width: none !important; /* Firefox */
+	-ms-overflow-style: none !important; /* IE and Edge */
+}
+*::-webkit-scrollbar {
+	display: none !important; /* Chrome, Safari, Opera */
+	width: 0 !important;
+	height: 0 !important;
+}

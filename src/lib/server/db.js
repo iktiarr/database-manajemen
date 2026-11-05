@@ -66,3 +66,19 @@ export function getTargetPool(dbName) {
 	poolCache.set(dbName, pool);
 	return pool;
 }
+
+/**
+ * Menutup dan menghapus pool koneksi dari cache jika ada.
+ * @param {string} dbName
+ */
+export async function closeTargetPool(dbName) {
+	if (poolCache.has(dbName)) {
+		try {
+			const pool = poolCache.get(dbName);
+			await pool.end();
+		} catch (err) {
+			console.error(`Error ending pool for ${dbName}:`, err);
+		}
+		poolCache.delete(dbName);
+	}
+}

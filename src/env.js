@@ -28,3 +28,4 @@ export const variables = {
 	AWS_REGION: opt,
 	NEON_FUNCTION_HELLO_BASE_URL: opt
 };
+

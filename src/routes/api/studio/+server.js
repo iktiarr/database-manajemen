@@ -205,6 +205,24 @@ export async function POST(event) {
 			});
 		}
 
+		// Action: Ubah Nama Tabel (Rename Table)
+		if (action === 'renameTable') {
+			if (!tableName || !isValidIdentifier(tableName)) {
+				return json({ error: 'Nama tabel lama tidak valid' }, { status: 400 });
+			}
+
+			const { newTableName } = body;
+			if (!newTableName || !isValidIdentifier(newTableName)) {
+				return json({ error: 'Nama tabel baru hanya boleh huruf, angka, dan underscore' }, { status: 400 });
+			}
+
+			await pool.query(`ALTER TABLE "${tableName}" RENAME TO "${newTableName}"`);
+			return json({
+				success: true,
+				message: `Tabel "${tableName}" berhasil diubah menjadi "${newTableName}".`
+			});
+		}
+
 		// Action: Tambah Kolom Baru (Add Column)
 		if (action === 'addColumn') {
 			if (!tableName || !isValidIdentifier(tableName)) {
@@ -244,7 +262,7 @@ export async function POST(event) {
 				return json({ error: 'Nama tabel tidak valid' }, { status: 400 });
 			}
 
-			const { rowData } = body;
+			const rowData = body.rowData || body.data;
 			if (!rowData || typeof rowData !== 'object') {
 				return json({ error: 'Data baris tidak boleh kosong' }, { status: 400 });
 			}
@@ -296,6 +314,66 @@ export async function POST(event) {
 			return json({
 				success: true,
 				message: 'Baris data berhasil dihapus!'
+			});
+		}
+
+		// Action: Ubah Baris Data (Update Row)
+		if (action === 'updateRow') {
+			if (!tableName || !isValidIdentifier(tableName)) {
+				return json({ error: 'Nama tabel tidak valid' }, { status: 400 });
+			}
+
+			const { pkColumn = 'id', pkValue } = body;
+			const rowData = body.rowData || body.data;
+			if (!isValidIdentifier(pkColumn) || pkValue === undefined || pkValue === null) {
+				return json({ error: 'Identifier baris tidak valid' }, { status: 400 });
+			}
+			if (!rowData || typeof rowData !== 'object') {
+				return json({ error: 'Data perubahan baris tidak valid' }, { status: 400 });
+			}
+
+			const setClauses = [];
+			const values = [];
+			let pIdx = 1;
+
+			for (const [key, val] of Object.entries(rowData)) {
+				if (!isValidIdentifier(key) || key === pkColumn) continue;
+				setClauses.push(`"${key}" = $${pIdx++}`);
+				let parsedVal = val;
+				if (val === '') parsedVal = null;
+				values.push(parsedVal);
+			}
+
+			if (setClauses.length === 0) {
+				return json({ error: 'Tidak ada kolom yang diubah' }, { status: 400 });
+			}
+
+			values.push(pkValue);
+			const updateSql = `UPDATE "${tableName}" SET ${setClauses.join(', ')} WHERE "${pkColumn}" = $${pIdx} RETURNING *;`;
+			const updateRes = await pool.query(updateSql, values);
+
+			return json({
+				success: true,
+				updated: updateRes.rows[0],
+				message: 'Baris data berhasil diperbarui!'
+			});
+		}
+
+		// Action: Hapus Kolom (Drop Column)
+		if (action === 'dropColumn') {
+			if (!tableName || !isValidIdentifier(tableName)) {
+				return json({ error: 'Nama tabel tidak valid' }, { status: 400 });
+			}
+
+			const { columnName } = body;
+			if (!columnName || !isValidIdentifier(columnName)) {
+				return json({ error: 'Nama kolom tidak valid' }, { status: 400 });
+			}
+
+			await pool.query(`ALTER TABLE "${tableName}" DROP COLUMN IF EXISTS "${columnName}" CASCADE`);
+			return json({
+				success: true,
+				message: `Kolom "${columnName}" berhasil dihapus dari tabel "${tableName}".`
 			});
 		}
 

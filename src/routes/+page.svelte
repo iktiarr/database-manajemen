@@ -5,14 +5,13 @@
 	import LogoutDialog from '$lib/components/layout/LogoutDialog.svelte';
 	import ChangeAdminPasswordDialog from '$lib/components/layout/ChangeAdminPasswordDialog.svelte';
 	import DatabaseStudio from '$lib/components/studio/DatabaseStudio.svelte';
-	import QueryConsole from '$lib/components/query/QueryConsole.svelte';
 	import AdminManager from '$lib/components/admins/AdminManager.svelte';
 	import GatewaySettings from '$lib/components/settings/GatewaySettings.svelte';
 
 	let { data } = $props();
 
 	// Navigation tab state
-	let activeTab = $state('databases'); // 'databases' | 'query' | 'admins' | 'settings'
+	let activeTab = $state('databases'); // 'databases' | 'admins' | 'settings'
 
 	function setActiveTab(tab) {
 		activeTab = tab;
@@ -41,7 +40,7 @@
 		}
 
 		const savedTab = localStorage.getItem('app_active_tab');
-		if (savedTab && ['databases', 'query', 'admins', 'settings'].includes(savedTab)) {
+		if (savedTab && ['databases', 'admins', 'settings'].includes(savedTab)) {
 			activeTab = savedTab;
 		}
 	});
@@ -75,11 +74,6 @@
 						bind:databases
 						rawDirectUrl={data?.rawDirectUrl}
 						rawPooledUrl={data?.rawPooledUrl}
-						{masterKey}
-					/>
-				{:else if activeTab === 'query'}
-					<QueryConsole
-						{databases}
 						{masterKey}
 					/>
 				{:else if activeTab === 'admins'}

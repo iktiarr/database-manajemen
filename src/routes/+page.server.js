@@ -19,6 +19,7 @@ export async function load({ locals }) {
 			       pg_encoding_to_char(encoding) as encoding
 			FROM pg_database
 			WHERE datistemplate = false
+			  AND datname NOT IN ('postgres', 'neondb')
 			ORDER BY datname ASC
 		`);
 		databases = res.rows;
