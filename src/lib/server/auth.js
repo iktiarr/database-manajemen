@@ -100,6 +100,11 @@ export async function ensureAdminsTable() {
 				created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 			);
 			ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+
+			-- Indeks B-Tree profesional untuk pencarian cepat & eliminasi sequential scan
+			CREATE INDEX IF NOT EXISTS idx_admins_email_lower ON admins (LOWER(email));
+			CREATE INDEX IF NOT EXISTS idx_admins_created_at ON admins (created_at DESC);
+			CREATE INDEX IF NOT EXISTS idx_admins_role_active ON admins (role, is_active);
 		`);
 
 		const defaultEmail = 'ihtiartiar081@gmail.com';

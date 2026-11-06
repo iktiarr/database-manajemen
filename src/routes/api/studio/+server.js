@@ -57,9 +57,9 @@ export async function GET(event) {
 			return json({ error: 'Parameter "table" tidak valid' }, { status: 400 });
 		}
 
-		// Eksekusi kueri kolom, primary key, data baris, dan total count secara bersamaan (Promise.all)
-		// Memangkas waktu tunggu dari serial (~600ms) menjadi paralel instan (~80ms)
-		const [columnsRes, pkRes, dataRes, totalRes] = await Promise.all([
+		// Eksekusi kueri kolom, primary key, data baris, total count, dan indeks secara bersamaan (Promise.all)
+		// Mengambil seluruh metadata tabel & indeks dalam satu round-trip paralel super cepat
+		const [columnsRes, pkRes, dataRes, totalRes, indexesRes] = await Promise.all([
 			pool.query(`
 				SELECT 
 					column_name,
@@ -83,17 +83,43 @@ export async function GET(event) {
 				  AND tc.table_name = $1
 			`, [tableName]),
 			pool.query(`SELECT * FROM "${tableName}" LIMIT 100`),
-			pool.query(`SELECT count(*)::int as count FROM "${tableName}"`)
+			pool.query(`SELECT count(*)::int as count FROM "${tableName}"`),
+			pool.query(`
+				SELECT
+					i.relname AS index_name,
+					a.attname AS column_name,
+					ix.indisunique AS is_unique,
+					ix.indisprimary AS is_primary,
+					am.amname AS index_type
+				FROM pg_index ix
+				JOIN pg_class t ON t.oid = ix.indrelid
+				JOIN pg_class i ON i.oid = ix.indexrelid
+				JOIN pg_am am ON i.relam = am.oid
+				JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+				WHERE t.relname = $1 AND t.relnamespace = 'public'::regnamespace
+				ORDER BY i.relname ASC
+			`, [tableName])
 		]);
 
 		const primaryKey = pkRes.rows[0]?.column_name || null;
+
+		const indexes = (indexesRes.rows || []).map((idx) => ({
+			name: idx.index_name,
+			column: idx.column_name,
+			isUnique: idx.is_unique,
+			isPrimary: idx.is_primary,
+			type: idx.index_type
+		}));
+
+		const indexedColumns = new Set(indexes.map((idx) => idx.column));
 
 		const columns = columnsRes.rows.map((c) => ({
 			name: c.column_name,
 			type: c.data_type === 'USER-DEFINED' ? c.udt_name : c.data_type,
 			nullable: c.is_nullable === 'YES',
 			defaultValue: c.column_default,
-			isPrimary: c.column_name === primaryKey
+			isPrimary: c.column_name === primaryKey,
+			isIndexed: indexedColumns.has(c.column_name)
 		}));
 
 		return json({
@@ -102,6 +128,7 @@ export async function GET(event) {
 			tableName,
 			columns,
 			primaryKey,
+			indexes,
 			rows: dataRes.rows,
 			totalCount: totalRes.rows[0]?.count ?? dataRes.rows.length
 		});
@@ -358,6 +385,42 @@ export async function POST(event) {
 			return json({
 				success: true,
 				message: `Kolom "${columnName}" berhasil dihapus dari tabel "${tableName}".`
+			});
+		}
+
+		// Action: Buat Indeks B-Tree Baru pada Kolom
+		if (action === 'createIndex') {
+			if (!tableName || !isValidIdentifier(tableName)) {
+				return json({ error: 'Nama tabel tidak valid' }, { status: 400 });
+			}
+
+			const { columnName, isUnique } = body;
+			if (!columnName || !isValidIdentifier(columnName)) {
+				return json({ error: 'Nama kolom yang dipilih tidak valid' }, { status: 400 });
+			}
+
+			const indexName = `idx_${tableName}_${columnName}`.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 63);
+			const uniqueClause = isUnique ? 'UNIQUE' : '';
+
+			await pool.query(`CREATE ${uniqueClause} INDEX IF NOT EXISTS "${indexName}" ON "${tableName}" ("${columnName}");`);
+			return json({
+				success: true,
+				indexName,
+				message: `Indeks B-Tree "${indexName}" berhasil dibuat pada kolom "${columnName}"!`
+			});
+		}
+
+		// Action: Hapus Indeks (Drop Index)
+		if (action === 'dropIndex') {
+			const { indexName } = body;
+			if (!indexName || !isValidIdentifier(indexName)) {
+				return json({ error: 'Nama indeks tidak valid' }, { status: 400 });
+			}
+
+			await pool.query(`DROP INDEX IF EXISTS "${indexName}" CASCADE;`);
+			return json({
+				success: true,
+				message: `Indeks "${indexName}" berhasil dihapus.`
 			});
 		}
 
