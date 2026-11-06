@@ -5,13 +5,16 @@
 	import LogoutDialog from '$lib/components/layout/LogoutDialog.svelte';
 	import ChangeAdminPasswordDialog from '$lib/components/layout/ChangeAdminPasswordDialog.svelte';
 	import DatabaseStudio from '$lib/components/studio/DatabaseStudio.svelte';
+	import RealtimeManager from '$lib/components/realtime/RealtimeManager.svelte';
+	import StorageManager from '$lib/components/storage/StorageManager.svelte';
+	import AuthManager from '$lib/components/auth/AuthManager.svelte';
 	import AdminManager from '$lib/components/admins/AdminManager.svelte';
 	import GatewaySettings from '$lib/components/settings/GatewaySettings.svelte';
 
 	let { data } = $props();
 
 	// Navigation tab state
-	let activeTab = $state('databases'); // 'databases' | 'admins' | 'settings'
+	let activeTab = $state('databases'); // 'databases' | 'realtime' | 'storage' | 'auth' | 'admins' | 'settings'
 
 	function setActiveTab(tab) {
 		activeTab = tab;
@@ -40,7 +43,7 @@
 		}
 
 		const savedTab = localStorage.getItem('app_active_tab');
-		if (savedTab && ['databases', 'admins', 'settings'].includes(savedTab)) {
+		if (savedTab && ['databases', 'realtime', 'storage', 'auth', 'admins', 'settings'].includes(savedTab)) {
 			activeTab = savedTab;
 		}
 	});
@@ -56,7 +59,7 @@
 </script>
 
 <Sidebar.Provider>
-	<div class="flex min-h-screen w-full bg-slate-50/50 text-slate-900 font-sans antialiased">
+	<div class="flex min-h-screen w-full bg-neutral-50/60 text-neutral-900 font-sans antialiased">
 		<!-- Sidebar Navigation Component -->
 		<AppSidebar
 			{activeTab}
@@ -67,7 +70,7 @@
 		/>
 
 		<!-- Main Inset Content Area -->
-		<Sidebar.Inset class="flex-1 flex flex-col min-w-0 bg-slate-50/50 w-full">
+		<Sidebar.Inset class="flex-1 flex flex-col min-w-0 bg-neutral-50/60 w-full">
 			<main class="flex-1 p-5 md:p-8 space-y-6 w-full max-w-7xl mx-auto">
 				{#if activeTab === 'databases'}
 					<DatabaseStudio
@@ -76,6 +79,15 @@
 						rawPooledUrl={data?.rawPooledUrl}
 						{masterKey}
 					/>
+				{:else if activeTab === 'realtime'}
+					<RealtimeManager
+						{databases}
+						initialSecret={data?.neonRealtimeSecret || ''}
+					/>
+				{:else if activeTab === 'storage'}
+					<StorageManager />
+				{:else if activeTab === 'auth'}
+					<AuthManager />
 				{:else if activeTab === 'admins'}
 					<AdminManager
 						bind:admins

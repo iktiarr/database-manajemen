@@ -10,6 +10,8 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Spinner } from '$lib/components/ui/spinner/index.js';
+	import { toast } from 'svelte-sonner';
 	import EyeIcon from '@lucide/svelte/icons/eye';
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 
@@ -71,7 +73,7 @@
 		adminFeedback = { type: '', text: '' };
 
 		if (!newAdminEmail.trim() || !newAdminPassword.trim()) {
-			adminFeedback = { type: 'error', text: 'Email dan password wajib diisi.' };
+			toast.error('Data Belum Lengkap', { description: 'Email dan password wajib diisi.' });
 			return;
 		}
 
@@ -89,6 +91,7 @@
 			});
 
 			if (res.ok) {
+				toast.success('Admin Ditambahkan', { description: `Admin "${newAdminEmail}" berhasil dibuat.` });
 				showCreateAdminDialog = false;
 				newAdminEmail = '';
 				newAdminPassword = '';
@@ -96,10 +99,10 @@
 				newAdminRole = 'admin';
 				await invalidateAll();
 			} else {
-				adminFeedback = { type: 'error', text: 'Gagal menambahkan admin.' };
+				toast.error('Gagal Menambahkan Admin', { description: 'Email mungkin sudah terdaftar.' });
 			}
 		} catch (err) {
-			adminFeedback = { type: 'error', text: err.message };
+			toast.error('Terjadi Kesalahan', { description: err.message });
 		} finally {
 			isCreatingAdmin = false;
 		}
@@ -140,18 +143,22 @@
 
 			if (res.ok) {
 				if (isUpdatingSelf) {
-					window.location.href = '/login';
+					toast.success('Profil Diperbarui', { description: 'Mengalihkan ke halaman login' });
+					setTimeout(() => {
+						window.location.href = '/login';
+					}, 1000);
 					return;
 				}
 				selectedAdmin.email = editEmail.trim();
 				selectedAdmin.role = editRole;
 				showEditAdminDialog = false;
+				toast.success('Admin Diperbarui', { description: 'Perubahan berhasil disimpan.' });
 				await invalidateAll();
 			} else {
-				editFeedback = 'Gagal memperbarui data admin.';
+				toast.error('Gagal Memperbarui', { description: 'Tidak dapat memperbarui data admin.' });
 			}
 		} catch (err) {
-			editFeedback = err.message;
+			toast.error('Terjadi Kesalahan', { description: err.message });
 		} finally {
 			isUpdatingAdmin = false;
 		}
@@ -166,7 +173,7 @@
 	async function handleDeleteAdmin() {
 		if (!selectedAdmin) return;
 		if (isSelf(selectedAdmin)) {
-			deleteFeedback = 'Anda tidak dapat menghapus akun sendiri saat sedang login.';
+			toast.error('Aksi Ditolak', { description: 'Anda tidak dapat menghapus akun sendiri.' });
 			return;
 		}
 		isDeletingAdmin = true;
@@ -186,11 +193,12 @@
 				admins = admins.filter((a) => a.id !== selectedAdmin.id);
 				showDeleteAdminDialog = false;
 				selectedAdmin = null;
+				toast.success('Admin Dihapus', { description: 'Akun admin berhasil dihapus.' });
 			} else {
-				deleteFeedback = 'Gagal menghapus admin.';
+				toast.error('Gagal Menghapus', { description: 'Tidak dapat menghapus admin.' });
 			}
 		} catch (err) {
-			deleteFeedback = err.message;
+			toast.error('Terjadi Kesalahan', { description: err.message });
 		} finally {
 			isDeletingAdmin = false;
 		}
@@ -198,7 +206,7 @@
 
 	async function handleToggleStatus(admin) {
 		if (isSelf(admin)) {
-			alert('Akun yang sedang login tidak dapat menonaktifkan dirinya sendiri demi keamanan.');
+			toast.error('Aksi Ditolak', { description: 'Akun sendiri tidak dapat dinonaktifkan.' });
 			return;
 		}
 
@@ -217,9 +225,13 @@
 
 			if (!res.ok) {
 				admin.is_active = previousStatus;
+				toast.error('Gagal Mengubah Status', { description: 'Gagal memperbarui status admin.' });
+			} else {
+				toast.success('Status Diperbarui', { description: `Admin sekarang ${admin.is_active ? 'Aktif' : 'Nonaktif'}.` });
 			}
 		} catch {
 			admin.is_active = previousStatus;
+			toast.error('Kesalahan Jaringan', { description: 'Gagal menghubungi server.' });
 		}
 	}
 </script>
@@ -439,9 +451,13 @@
 				<Button
 					type="submit"
 					disabled={isCreatingAdmin}
-					class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+					class="text-xs bg-black hover:bg-neutral-800 text-white font-medium min-w-24 flex items-center justify-center"
 				>
-					{isCreatingAdmin ? 'Menyimpan...' : 'Simpan Admin'}
+					{#if isCreatingAdmin}
+						<Spinner size="xs" class="text-white" />
+					{:else}
+						Simpan Admin
+					{/if}
 				</Button>
 			</div>
 		</form>
@@ -541,9 +557,13 @@
 				<Button
 					type="submit"
 					disabled={isUpdatingAdmin}
-					class="text-xs bg-slate-900 hover:bg-slate-800 text-white font-medium"
+					class="text-xs bg-black hover:bg-neutral-800 text-white font-medium min-w-28 flex items-center justify-center"
 				>
-					{isUpdatingAdmin ? 'Memperbarui...' : (isSelf(selectedAdmin) ? 'Simpan & Login Ulang' : 'Simpan Perubahan')}
+					{#if isUpdatingAdmin}
+						<Spinner size="xs" class="text-white" />
+					{:else}
+						{isSelf(selectedAdmin) ? 'Simpan & Login Ulang' : 'Simpan Perubahan'}
+					{/if}
 				</Button>
 			</div>
 		</form>
@@ -575,9 +595,13 @@
 			<AlertDialog.Action
 				onclick={handleDeleteAdmin}
 				disabled={isDeletingAdmin}
-				class="text-xs bg-rose-600 hover:bg-rose-700 text-white"
+				class="text-xs bg-rose-600 hover:bg-rose-700 text-white min-w-28 flex items-center justify-center"
 			>
-				{isDeletingAdmin ? 'Menghapus...' : 'Ya, Hapus Admin'}
+				{#if isDeletingAdmin}
+					<Spinner size="xs" class="text-white" />
+				{:else}
+					Ya, Hapus Admin
+				{/if}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

@@ -17,6 +17,11 @@ export async function handle({ event, resolve }) {
 		return resolve(event);
 	}
 
+	// Halaman publik tanpa otentikasi (landing page portofolio)
+	if (pathname === '/landing-page' || pathname.startsWith('/landing-page/')) {
+		return resolve(event);
+	}
+
 	// Jika di halaman login dan sudah terautentikasi, redirect ke dashboard
 	if (pathname === '/login') {
 		if (admin) {

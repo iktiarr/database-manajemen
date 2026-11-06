@@ -4,6 +4,8 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Spinner } from '$lib/components/ui/spinner/index.js';
+	import { toast } from 'svelte-sonner';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import CopyIcon from '@lucide/svelte/icons/copy';
@@ -174,12 +176,12 @@
 		dbPasswordError = '';
 
 		if (!inputCustomPassword.trim()) {
-			dbPasswordError = 'Password tidak boleh kosong.';
+			toast.error('Password Kosong', { description: 'Password baru tidak boleh kosong.' });
 			return;
 		}
 
 		if (inputCustomPassword !== inputCustomPasswordConfirm) {
-			dbPasswordError = 'Konfirmasi password tidak cocok.';
+			toast.error('Password Tidak Cocok', { description: 'Konfirmasi password tidak sesuai.' });
 			return;
 		}
 
@@ -187,6 +189,7 @@
 		if (typeof localStorage !== 'undefined') {
 			localStorage.setItem('neon_custom_db_password', customDbPassword);
 		}
+		toast.success('Password Disimpan', { description: 'Password database lokal berhasil diperbarui.' });
 		showChangeDbPasswordModal = false;
 	}
 
@@ -260,7 +263,7 @@
 
 		const cleanName = newDbName.trim();
 		if (!cleanName || !/^[a-zA-Z0-9_]+$/.test(cleanName)) {
-			dbCreateError = 'Nama proyek hanya boleh berupa huruf, angka, atau underscore.';
+			toast.error('Nama Tidak Valid', { description: 'Hanya boleh huruf, angka, atau underscore.' });
 			return;
 		}
 
@@ -286,9 +289,10 @@
 
 			newDbName = '';
 			showCreateDbDialog = false;
+			toast.success('Proyek Dibuat', { description: `Proyek "${cleanName}" berhasil ditambahkan.` });
 			openProjectDetail(cleanName);
 		} catch (err) {
-			dbCreateError = err.message;
+			toast.error('Gagal Membuat Proyek', { description: err.message });
 		} finally {
 			isCreatingDb = false;
 		}
@@ -305,6 +309,7 @@
 		isDeletingProject = true;
 		deleteProjectError = '';
 		try {
+			const deletedName = projectToDelete;
 			const res = await fetch('/api/databases', {
 				method: 'DELETE',
 				headers: {
@@ -325,8 +330,9 @@
 			}
 			showDeleteProjectDialog = false;
 			projectToDelete = '';
+			toast.success('Proyek Dihapus', { description: `Proyek "${deletedName}" berhasil dihapus.` });
 		} catch (err) {
-			deleteProjectError = err.message;
+			toast.error('Gagal Menghapus', { description: err.message });
 		} finally {
 			isDeletingProject = false;
 		}
@@ -737,9 +743,13 @@
 					type="submit"
 					size="sm"
 					disabled={isCreatingDb || !newDbName.trim()}
-					class="text-xs bg-black text-white hover:bg-neutral-800"
+					class="text-xs bg-black text-white hover:bg-neutral-800 min-w-20 flex items-center justify-center"
 				>
-					{isCreatingDb ? 'Membuat...' : 'Buat Proyek'}
+					{#if isCreatingDb}
+						<Spinner size="xs" class="text-white" />
+					{:else}
+						Buat Proyek
+					{/if}
 				</Button>
 			</Dialog.Footer>
 		</form>
@@ -772,9 +782,13 @@
 				type="button"
 				onclick={handleDeleteProject}
 				disabled={isDeletingProject}
-				class="text-xs bg-rose-600 hover:bg-rose-700 text-white font-medium px-3 py-1.5 rounded-md transition cursor-pointer"
+				class="text-xs bg-rose-600 hover:bg-rose-700 text-white font-medium px-3 py-1.5 rounded-md transition cursor-pointer min-w-24 flex items-center justify-center"
 			>
-				{isDeletingProject ? 'Menghapus...' : 'Hapus Proyek'}
+				{#if isDeletingProject}
+					<Spinner size="xs" class="text-white" />
+				{:else}
+					Hapus Proyek
+				{/if}
 			</button>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

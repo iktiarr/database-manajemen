@@ -2,7 +2,8 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import * as Alert from '$lib/components/ui/alert/index.js';
+	import { Spinner } from '$lib/components/ui/spinner/index.js';
+	import { toast } from 'svelte-sonner';
 	import EyeIcon from '@lucide/svelte/icons/eye';
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 
@@ -13,32 +14,29 @@
 	let showNewPassword = $state(false);
 	let showConfirmPassword = $state(false);
 	let isSubmitting = $state(false);
-	let feedback = $state({ type: '', message: '' });
 
 	function resetForm() {
 		newPassword = '';
 		confirmPassword = '';
 		showNewPassword = false;
 		showConfirmPassword = false;
-		feedback = { type: '', message: '' };
 	}
 
 	async function handleSubmit(e) {
 		e.preventDefault();
-		feedback = { type: '', message: '' };
 
 		if (!currentAdmin?.id) {
-			feedback = { type: 'error', message: 'Sesi admin tidak terdeteksi. Silakan muat ulang halaman.' };
+			toast.error('Sesi Tidak Ditemukan', { description: 'Silakan muat ulang halaman terlebih dahulu.' });
 			return;
 		}
 
 		if (newPassword.trim().length < 6) {
-			feedback = { type: 'error', message: 'Password baru minimal 6 karakter.' };
+			toast.error('Password Terlalu Pendek', { description: 'Password baru minimal 6 karakter.' });
 			return;
 		}
 
 		if (newPassword !== confirmPassword) {
-			feedback = { type: 'error', message: 'Konfirmasi password tidak cocok.' };
+			toast.error('Password Tidak Cocok', { description: 'Konfirmasi password harus sama.' });
 			return;
 		}
 
@@ -57,18 +55,15 @@
 			});
 
 			if (res.ok) {
-				feedback = {
-					type: 'success',
-					message: 'Password berhasil diperbarui. Mengalihkan ke login...'
-				};
+				toast.success('Password Diperbarui', { description: 'Sesi berakhir, mengalihkan ke login.' });
 				setTimeout(() => {
 					window.location.href = '/login';
 				}, 1000);
 			} else {
-				feedback = { type: 'error', message: 'Gagal memperbarui password admin.' };
+				toast.error('Gagal Memperbarui', { description: 'Terjadi kegagalan saat memperbarui password.' });
 			}
 		} catch (err) {
-			feedback = { type: 'error', message: err.message || 'Terjadi kesalahan sistem.' };
+			toast.error('Kesalahan Sistem', { description: err.message || 'Gagal menghubungi server.' });
 		} finally {
 			isSubmitting = false;
 		}
@@ -83,18 +78,6 @@
 				{currentAdmin?.email || 'Admin'}
 			</Dialog.Description>
 		</Dialog.Header>
-
-		{#if feedback.message}
-			<Alert.Root
-				class="my-3 text-xs {feedback.type === 'error'
-					? 'bg-rose-50 border-rose-200 text-rose-800'
-					: 'bg-neutral-100 border-neutral-200 text-neutral-900'}"
-			>
-				<Alert.Description>
-					{feedback.message}
-				</Alert.Description>
-			</Alert.Root>
-		{/if}
 
 		<form onsubmit={handleSubmit} class="space-y-4 pt-2">
 			<div>
@@ -184,9 +167,13 @@
 					type="submit"
 					size="sm"
 					disabled={isSubmitting || !newPassword || newPassword !== confirmPassword}
-					class="text-xs bg-black text-white hover:bg-neutral-800"
+					class="text-xs bg-black text-white hover:bg-neutral-800 min-w-16 flex items-center justify-center"
 				>
-					{isSubmitting ? 'Menyimpan...' : 'Simpan'}
+					{#if isSubmitting}
+						<Spinner size="xs" class="text-white" />
+					{:else}
+						Simpan
+					{/if}
 				</Button>
 			</Dialog.Footer>
 		</form>

@@ -6,6 +6,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Progress } from '$lib/components/ui/progress/index.js';
+	import { toast } from 'svelte-sonner';
 
 	let {
 		masterKey = $bindable(''),
@@ -16,14 +17,10 @@
 	} = $props();
 
 	let showKey = $state(false);
-	let keySavedNotice = $state(false);
 
 	function saveMasterKey() {
 		localStorage.setItem('app_master_key', masterKey);
-		keySavedNotice = true;
-		setTimeout(() => {
-			keySavedNotice = false;
-		}, 2000);
+		toast.success('Key Disimpan', { description: 'Master Key tersimpan di penyimpanan browser.' });
 	}
 </script>
 
@@ -62,12 +59,12 @@
 				</div>
 
 				<div class="flex items-center justify-between pt-2">
-					<span class="text-xs text-slate-400">Tersimpan di browser</span>
+					<span class="text-xs text-neutral-400">Tersimpan di browser</span>
 					<Button
 						onclick={saveMasterKey}
-						class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium"
+						class="bg-black hover:bg-neutral-800 text-white text-xs font-medium cursor-pointer"
 					>
-						{keySavedNotice ? 'Tersimpan!' : 'Simpan Key'}
+						Simpan Key
 					</Button>
 				</div>
 			</div>

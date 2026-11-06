@@ -9,6 +9,8 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
+	import { Spinner } from '$lib/components/ui/spinner/index.js';
+	import { toast } from 'svelte-sonner';
 
 	let {
 		databases = [],
@@ -36,11 +38,13 @@
 
 		if (!masterKey.trim()) {
 			queryResult = { error: 'Master API Key belum diatur. Harap masukkan Master API Key di menu API Key & Settings.' };
+			toast.error('API Key Diperlukan', { description: 'Atur Master API Key terlebih dahulu' });
 			return;
 		}
 
 		if (!sqlQuery.trim()) {
 			queryResult = { error: 'Query SQL tidak boleh kosong.' };
+			toast.error('Query Kosong', { description: 'Masukkan perintah SQL yang valid' });
 			return;
 		}
 
@@ -50,10 +54,12 @@
 				parsedParams = JSON.parse(sqlParams);
 				if (!Array.isArray(parsedParams)) {
 					queryResult = { error: 'Parameter harus berformat JSON Array, contoh: ["val1", 2]' };
+					toast.error('Format Salah', { description: 'Parameter harus berupa array JSON' });
 					return;
 				}
 			} catch {
 				queryResult = { error: 'Format JSON Parameter tidak valid.' };
+				toast.error('Format Salah', { description: 'Sintaks JSON parameter tidak valid' });
 				return;
 			}
 		}
@@ -81,14 +87,17 @@
 
 			if (!res.ok) {
 				queryResult = { error: dataRes.error || 'Terjadi kesalahan eksekusi query' };
+				toast.error('Eksekusi Gagal', { description: dataRes.error || 'Query tidak berhasil dijalankan' });
 			} else {
 				queryResult = {
 					rows: dataRes.rows || [],
 					rowCount: dataRes.rowCount ?? 0
 				};
+				toast.success('Query Berhasil', { description: `${dataRes.rowCount ?? 0} baris dalam ${queryDuration}ms` });
 			}
 		} catch (err) {
 			queryResult = { error: err.message || 'Gagal terhubung ke API gateway' };
+			toast.error('Koneksi Gagal', { description: err.message || 'Tidak dapat terhubung ke server' });
 		} finally {
 			isExecuting = false;
 		}
@@ -189,9 +198,13 @@ console.log(rows);`);
 				<Button
 					onclick={handleExecuteQuery}
 					disabled={isExecuting}
-					class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium px-5 shadow-xs"
+					class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium px-5 shadow-xs flex items-center justify-center min-w-[130px] min-h-[36px]"
 				>
-					{isExecuting ? 'Mengeksekusi...' : 'Jalankan Query'}
+					{#if isExecuting}
+						<Spinner size="sm" class="text-white" />
+					{:else}
+						Jalankan Query
+					{/if}
 				</Button>
 			</div>
 		</div>

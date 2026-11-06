@@ -4,6 +4,8 @@
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Spinner } from '$lib/components/ui/spinner/index.js';
+	import { toast } from 'svelte-sonner';
 	import EyeIcon from '@lucide/svelte/icons/eye';
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 
@@ -32,8 +34,11 @@
 				method="POST"
 				use:enhance={() => {
 					loading = true;
-					return async ({ update }) => {
+					return async ({ update, result }) => {
 						loading = false;
+						if (result.type === 'failure' && result.data?.error) {
+							toast.error('Gagal Masuk', { description: result.data.error });
+						}
 						await update();
 					};
 				}}
@@ -87,10 +92,10 @@
 				<Button
 					type="submit"
 					disabled={loading}
-					class="w-full bg-black hover:bg-neutral-800 text-white font-medium text-xs py-2.5 rounded-lg shadow-xs transition cursor-pointer"
+					class="w-full bg-black hover:bg-neutral-800 text-white font-medium text-xs py-2.5 rounded-lg shadow-xs transition cursor-pointer flex items-center justify-center"
 				>
 					{#if loading}
-						<span>Memverifikasi...</span>
+						<Spinner size="sm" class="text-white" />
 					{:else}
 						<span>Masuk</span>
 					{/if}

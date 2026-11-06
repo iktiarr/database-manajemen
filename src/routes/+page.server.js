@@ -46,6 +46,7 @@ export async function load({ locals }) {
 		hasNeonAuth: Boolean(env.NEON_AUTH_BASE_URL || process.env.NEON_AUTH_BASE_URL),
 		hasRealtime: Boolean(env.NEON_REALTIME_URL || process.env.NEON_REALTIME_URL),
 		neonEndpoint,
+		neonRealtimeSecret: env.NEON_REALTIME_SECRET || process.env.NEON_REALTIME_SECRET || '',
 		rawDirectUrl: rawDirect,
 		rawPooledUrl: rawPooled
 	};

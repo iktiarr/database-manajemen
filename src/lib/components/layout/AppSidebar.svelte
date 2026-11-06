@@ -49,6 +49,42 @@
 
 				<Sidebar.MenuItem>
 					<Sidebar.MenuButton
+						isActive={activeTab === 'realtime'}
+						onclick={() => onTabChange('realtime')}
+						class="w-full flex items-center px-3 py-2 rounded-lg text-xs font-medium transition cursor-pointer {activeTab === 'realtime'
+							? 'bg-black text-white font-semibold'
+							: 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}"
+					>
+						<span>Neon Realtime</span>
+					</Sidebar.MenuButton>
+				</Sidebar.MenuItem>
+
+				<Sidebar.MenuItem>
+					<Sidebar.MenuButton
+						isActive={activeTab === 'storage'}
+						onclick={() => onTabChange('storage')}
+						class="w-full flex items-center px-3 py-2 rounded-lg text-xs font-medium transition cursor-pointer {activeTab === 'storage'
+							? 'bg-black text-white font-semibold'
+							: 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}"
+					>
+						<span>S3 Storage</span>
+					</Sidebar.MenuButton>
+				</Sidebar.MenuItem>
+
+				<Sidebar.MenuItem>
+					<Sidebar.MenuButton
+						isActive={activeTab === 'auth'}
+						onclick={() => onTabChange('auth')}
+						class="w-full flex items-center px-3 py-2 rounded-lg text-xs font-medium transition cursor-pointer {activeTab === 'auth'
+							? 'bg-black text-white font-semibold'
+							: 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}"
+					>
+						<span>Neon Auth</span>
+					</Sidebar.MenuButton>
+				</Sidebar.MenuItem>
+
+				<Sidebar.MenuItem>
+					<Sidebar.MenuButton
 						isActive={activeTab === 'admins'}
 						onclick={() => onTabChange('admins')}
 						class="w-full flex items-center px-3 py-2 rounded-lg text-xs font-medium transition cursor-pointer {activeTab === 'admins'
