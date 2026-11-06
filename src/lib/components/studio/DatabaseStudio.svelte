@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -81,6 +81,10 @@
 	let rowBeingDeleted = $state(null);
 	let isDeletingRow = $state(false);
 
+	// Realtime Silent Sync state (Tanpa UI berisik/kedip)
+	let isSyncingRealtime = false;
+	let realtimeInterval = null;
+
 	onMount(() => {
 		const savedStudioDb = localStorage.getItem('app_studio_db');
 		if (savedStudioDb && userProjects.some((d) => d.name === savedStudioDb)) {
@@ -88,7 +92,71 @@
 		} else if (userProjects[0]) {
 			selectedStudioDb = userProjects[0].name;
 		}
+
+		// Polling silent realtime setiap 1.5 detik agar data masuk dari Project B langsung muncul instan
+		realtimeInterval = setInterval(() => {
+			performSilentRealtimeSync();
+		}, 1500);
+
+		const handleVisibilityChange = () => {
+			if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+				performSilentRealtimeSync();
+			}
+		};
+		if (typeof document !== 'undefined') {
+			document.addEventListener('visibilitychange', handleVisibilityChange);
+		}
+
+		return () => {
+			if (realtimeInterval) clearInterval(realtimeInterval);
+			if (typeof document !== 'undefined') {
+				document.removeEventListener('visibilitychange', handleVisibilityChange);
+			}
+		};
 	});
+
+	onDestroy(() => {
+		if (realtimeInterval) {
+			clearInterval(realtimeInterval);
+			realtimeInterval = null;
+		}
+	});
+
+	async function performSilentRealtimeSync() {
+		if (
+			isSyncingRealtime ||
+			!selectedStudioDb ||
+			!selectedTable ||
+			viewMode !== 'detail' ||
+			showEditRowDialog ||
+			showDeleteRowDialog
+		) {
+			return;
+		}
+		if (typeof document !== 'undefined' && document.hidden) return;
+
+		isSyncingRealtime = true;
+		try {
+			const res = await fetch(
+				`/api/studio?db=${encodeURIComponent(selectedStudioDb)}&table=${encodeURIComponent(selectedTable)}&mode=rowsOnly`,
+				{
+					headers: masterKey.trim() ? { Authorization: `Bearer ${masterKey.trim()}` } : {}
+				}
+			);
+			const result = await res.json();
+			if (res.ok && result.rows) {
+				const currentStr = JSON.stringify(tableRows);
+				const newStr = JSON.stringify(result.rows);
+				if (currentStr !== newStr) {
+					tableRows = result.rows;
+				}
+			}
+		} catch {
+			// Silent catch to prevent UI disturbance
+		} finally {
+			isSyncingRealtime = false;
+		}
+	}
 
 	async function handleGenerateAutomaticPassword() {
 		if (!selectedStudioDb) return;

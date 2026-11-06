@@ -25,6 +25,7 @@ export async function GET(event) {
 
 	const dbName = event.url.searchParams.get('db')?.trim();
 	const tableName = event.url.searchParams.get('table')?.trim();
+	const mode = event.url.searchParams.get('mode')?.trim();
 
 	if (!dbName || !isValidIdentifier(dbName)) {
 		return json({ error: 'Parameter "db" tidak valid atau kosong' }, { status: 400 });
@@ -32,6 +33,21 @@ export async function GET(event) {
 
 	try {
 		const pool = getTargetPool(dbName);
+
+		// Mode cepat khusus realtime sync: hanya mengambil data baris (tanpa kueri katalog skema yang berat)
+		if (tableName && mode === 'rowsOnly') {
+			if (!isValidIdentifier(tableName)) {
+				return json({ error: 'Parameter "table" tidak valid' }, { status: 400 });
+			}
+			const dataRes = await pool.query(`SELECT * FROM "${tableName}" LIMIT 100`);
+			return json({
+				success: true,
+				dbName,
+				tableName,
+				rows: dataRes.rows,
+				totalCount: dataRes.rows.length
+			});
+		}
 
 		// Jika nama tabel tidak diberikan, kembalikan daftar semua tabel public dan kredensial role proyek
 		if (!tableName) {

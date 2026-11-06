@@ -151,3 +151,4 @@ export async function deleteProjectCredentials(dbName) {
 		console.warn(`Could not drop role "${roleName}":`, err.message);
 	}
 }
+
