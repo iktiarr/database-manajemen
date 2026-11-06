@@ -1,5 +1,5 @@
 <script>
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount } from 'svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -12,7 +12,7 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import EyeIcon from '@lucide/svelte/icons/eye';
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
-	import ZapIcon from '@lucide/svelte/icons/zap';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
 
@@ -40,14 +40,11 @@
 	let showConnPassword = $state(false);
 	let copiedConnString = $state(false);
 
-	// Custom DB Password state & modal
+	// Custom DB Password state (Auto-Generated Secure Password)
 	let customDbPassword = $state('');
 	let showChangeDbPasswordModal = $state(false);
-	let inputCustomPassword = $state('');
-	let inputCustomPasswordConfirm = $state('');
-	let showInputCustomPassword = $state(false);
-	let showInputCustomPasswordConfirm = $state(false);
-	let dbPasswordError = $state('');
+	let generatedPasswordDisplay = $state('');
+	let copiedGeneratedPassword = $state(false);
 
 	// Project Creation Dialog
 	let isRefreshingDbs = $state(false);
@@ -62,27 +59,25 @@
 	let isDeletingProject = $state(false);
 	let deleteProjectError = $state('');
 
-	// Studio Tables, Data & Indeks B-Tree state
+	// Studio Tables, Data & Indeks
 	let studioTables = $state([]);
 	let selectedTable = $state(null);
 	let tableColumns = $state([]);
 	let tableRows = $state([]);
 	let tableIndexes = $state([]);
-	let activeTableTab = $state('data'); // 'data' | 'indexes'
+	let primaryKey = $state('id');
 	let isLoadingStudio = $state(false);
 	let isLoadingTableData = $state(false);
 
-	// Indeks B-Tree Dialog State
-	let showCreateIndexDialog = $state(false);
-	let selectedIndexCol = $state('');
-	let isUniqueIndex = $state(false);
-	let isCreatingIndex = $state(false);
+	// Row Edit & Delete Dialog states
+	let showEditRowDialog = $state(false);
+	let rowBeingEdited = $state(null);
+	let editRowData = $state({});
+	let isUpdatingRow = $state(false);
 
-	// Live Realtime Auto-Sync State
-	let isLiveSync = $state(true);
-	let isSyncingInBackground = false;
-	let lastSyncedAt = $state('');
-	let liveSyncTimer = null;
+	let showDeleteRowDialog = $state(false);
+	let rowBeingDeleted = $state(null);
+	let isDeletingRow = $state(false);
 
 	onMount(() => {
 		const savedCustomPw = localStorage.getItem('neon_custom_db_password');
@@ -96,45 +91,55 @@
 		} else if (userProjects[0]) {
 			selectedStudioDb = userProjects[0].name;
 		}
-
-		startLiveSyncInterval();
 	});
 
-	onDestroy(() => {
-		stopLiveSyncInterval();
-	});
+	function generateSecurePassword(length = 24) {
+		const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+		const lowercase = 'abcdefghijkmnpqrstuvwxyz';
+		const numbers = '23456789';
+		const symbols = '!@#$%^&*()_+~=';
+		const allChars = uppercase + lowercase + numbers + symbols;
 
-	function startLiveSyncInterval() {
-		stopLiveSyncInterval();
-		liveSyncTimer = setInterval(() => {
-			if (!isLiveSync) return;
-			if (typeof document !== 'undefined' && document.hidden) return; // hemat kuota Vercel & Neon saat tab diminimalkan
-			if (viewMode === 'detail' && selectedStudioDb && !isSyncingInBackground) {
-				performSilentSync();
-			}
-		}, 3500);
+		const values = new Uint32Array(length);
+		crypto.getRandomValues(values);
+
+		let password = [
+			uppercase[values[0] % uppercase.length],
+			lowercase[values[1] % lowercase.length],
+			numbers[values[2] % numbers.length],
+			symbols[values[3] % symbols.length]
+		];
+
+		for (let i = 4; i < length; i++) {
+			password.push(allChars[values[i] % allChars.length]);
+		}
+
+		for (let i = password.length - 1; i > 0; i--) {
+			const j = values[i] % (i + 1);
+			[password[i], password[j]] = [password[j], password[i]];
+		}
+
+		return password.join('');
 	}
 
-	function stopLiveSyncInterval() {
-		if (liveSyncTimer) {
-			clearInterval(liveSyncTimer);
-			liveSyncTimer = null;
+	function handleGenerateAutomaticPassword() {
+		const newSecurePw = generateSecurePassword(24);
+		customDbPassword = newSecurePw;
+		generatedPasswordDisplay = newSecurePw;
+		copiedGeneratedPassword = false;
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('neon_custom_db_password', newSecurePw);
 		}
+		showChangeDbPasswordModal = true;
+		toast.success('Password Diubah Otomatis', { description: 'Password 24 karakter aman berhasil diterapkan.' });
 	}
 
-	async function performSilentSync() {
-		if (isSyncingInBackground || !selectedStudioDb) return;
-		isSyncingInBackground = true;
-		try {
-			await loadStudioTables(selectedStudioDb, true);
-			if (selectedTable) {
-				await loadTableData(selectedStudioDb, selectedTable, true);
-			}
-		} catch (err) {
-			console.error('Silent sync error:', err);
-		} finally {
-			isSyncingInBackground = false;
-		}
+	function copyGeneratedPassword() {
+		if (!generatedPasswordDisplay) return;
+		navigator.clipboard.writeText(generatedPasswordDisplay);
+		copiedGeneratedPassword = true;
+		toast.success('Password Tersalin', { description: 'Password tersimpan di clipboard Anda.' });
+		setTimeout(() => (copiedGeneratedPassword = false), 2000);
 	}
 
 	$effect(() => {
@@ -218,37 +223,6 @@
 		viewMode = 'list';
 	}
 
-	function openChangeDbPasswordModal() {
-		inputCustomPassword = '';
-		inputCustomPasswordConfirm = '';
-		showInputCustomPassword = false;
-		showInputCustomPasswordConfirm = false;
-		dbPasswordError = '';
-		showChangeDbPasswordModal = true;
-	}
-
-	function handleSaveCustomPassword(e) {
-		e.preventDefault();
-		dbPasswordError = '';
-
-		if (!inputCustomPassword.trim()) {
-			toast.error('Password Kosong', { description: 'Password baru tidak boleh kosong.' });
-			return;
-		}
-
-		if (inputCustomPassword !== inputCustomPasswordConfirm) {
-			toast.error('Password Tidak Cocok', { description: 'Konfirmasi password tidak sesuai.' });
-			return;
-		}
-
-		customDbPassword = inputCustomPassword.trim();
-		if (typeof localStorage !== 'undefined') {
-			localStorage.setItem('neon_custom_db_password', customDbPassword);
-		}
-		toast.success('Password Disimpan', { description: 'Password database lokal berhasil diperbarui.' });
-		showChangeDbPasswordModal = false;
-	}
-
 	async function refreshDatabasesList() {
 		isRefreshingDbs = true;
 		try {
@@ -286,7 +260,6 @@
 					tableColumns = [];
 					tableRows = [];
 				}
-				lastSyncedAt = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 			}
 		} catch (err) {
 			console.error('Error loading tables:', err);
@@ -307,7 +280,7 @@
 				tableColumns = result.columns || [];
 				tableRows = result.rows || [];
 				tableIndexes = result.indexes || [];
-				lastSyncedAt = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+				primaryKey = result.primaryKey || 'id';
 			}
 		} catch (err) {
 			console.error('Error loading table data:', err);
@@ -316,19 +289,31 @@
 		}
 	}
 
-	function openCreateIndexDialog() {
-		if (tableColumns.length > 0) {
-			selectedIndexCol = tableColumns[0].name;
+	function openEditRowModal(row) {
+		rowBeingEdited = row;
+		const cleanData = {};
+		for (const col of tableColumns) {
+			const val = row[col.name];
+			if (val === null || val === undefined) {
+				cleanData[col.name] = '';
+			} else if (typeof val === 'object') {
+				cleanData[col.name] = JSON.stringify(val);
+			} else {
+				cleanData[col.name] = String(val);
+			}
 		}
-		isUniqueIndex = false;
-		showCreateIndexDialog = true;
+		editRowData = cleanData;
+		showEditRowDialog = true;
 	}
 
-	async function handleCreateIndex(e) {
+	async function handleSaveRowEdit(e) {
 		e.preventDefault();
-		if (!selectedStudioDb || !selectedTable || !selectedIndexCol) return;
+		if (!selectedStudioDb || !selectedTable || !rowBeingEdited) return;
 
-		isCreatingIndex = true;
+		isUpdatingRow = true;
+		const pkCol = primaryKey || 'id';
+		const pkVal = rowBeingEdited[pkCol];
+
 		try {
 			const res = await fetch('/api/studio', {
 				method: 'POST',
@@ -337,28 +322,40 @@
 					Authorization: masterKey.trim() ? `Bearer ${masterKey.trim()}` : ''
 				},
 				body: JSON.stringify({
-					action: 'createIndex',
+					action: 'updateRow',
 					dbName: selectedStudioDb,
 					tableName: selectedTable,
-					columnName: selectedIndexCol,
-					isUnique: isUniqueIndex
+					pkColumn: pkCol,
+					pkValue: pkVal,
+					rowData: editRowData
 				})
 			});
 			const result = await res.json();
-			if (!res.ok) throw new Error(result.error || 'Gagal membuat indeks.');
+			if (!res.ok) throw new Error(result.error || 'Gagal memperbarui data baris.');
 
-			showCreateIndexDialog = false;
-			toast.success('Indeks B-Tree Dibuat', { description: `Indeks pada kolom "${selectedIndexCol}" aktif.` });
+			showEditRowDialog = false;
+			rowBeingEdited = null;
+			toast.success('Data Berhasil Diubah', { description: 'Perubahan baris berhasil disimpan.' });
 			await loadTableData(selectedStudioDb, selectedTable, false);
 		} catch (err) {
-			toast.error('Gagal Membuat Indeks', { description: err.message });
+			toast.error('Gagal Mengubah Data', { description: err.message });
 		} finally {
-			isCreatingIndex = false;
+			isUpdatingRow = false;
 		}
 	}
 
-	async function handleDropIndex(indexName) {
-		if (!selectedStudioDb || !indexName) return;
+	function openDeleteRowModal(row) {
+		rowBeingDeleted = row;
+		showDeleteRowDialog = true;
+	}
+
+	async function handleConfirmDeleteRow() {
+		if (!selectedStudioDb || !selectedTable || !rowBeingDeleted) return;
+
+		isDeletingRow = true;
+		const pkCol = primaryKey || 'id';
+		const pkVal = rowBeingDeleted[pkCol];
+
 		try {
 			const res = await fetch('/api/studio', {
 				method: 'POST',
@@ -367,18 +364,24 @@
 					Authorization: masterKey.trim() ? `Bearer ${masterKey.trim()}` : ''
 				},
 				body: JSON.stringify({
-					action: 'dropIndex',
+					action: 'deleteRow',
 					dbName: selectedStudioDb,
-					indexName
+					tableName: selectedTable,
+					pkColumn: pkCol,
+					pkValue: pkVal
 				})
 			});
 			const result = await res.json();
-			if (!res.ok) throw new Error(result.error || 'Gagal menghapus indeks.');
+			if (!res.ok) throw new Error(result.error || 'Gagal menghapus data baris.');
 
-			toast.success('Indeks Dihapus', { description: `Indeks "${indexName}" berhasil dihapus.` });
+			showDeleteRowDialog = false;
+			rowBeingDeleted = null;
+			toast.success('Data Dihapus', { description: 'Baris data berhasil dihapus dari tabel.' });
 			await loadTableData(selectedStudioDb, selectedTable, false);
 		} catch (err) {
-			toast.error('Gagal Menghapus Indeks', { description: err.message });
+			toast.error('Gagal Menghapus Data', { description: err.message });
+		} finally {
+			isDeletingRow = false;
 		}
 	}
 
@@ -545,7 +548,7 @@
 	<!-- ========================================== -->
 	{:else}
 		<div class="space-y-6">
-			<!-- Top Bar: Ikon + Kembali, project name, Live Sync Toggle & Refresh instan -->
+			<!-- Top Bar: Kembali, Nama Proyek, & Tombol Segarkan -->
 			<div class="flex items-center justify-between pb-4 border-b border-neutral-200 flex-wrap gap-2">
 				<div class="flex items-center gap-3">
 					<button
@@ -557,46 +560,10 @@
 						<span>Kembali</span>
 					</button>
 					<span class="text-neutral-300">|</span>
-					<div class="flex items-center gap-2">
-						<h2 class="text-base font-semibold text-neutral-900">{selectedStudioDb}</h2>
-						{#if isLiveSync}
-							<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-								<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-								Live Realtime
-							</span>
-						{/if}
-					</div>
+					<h2 class="text-base font-semibold text-neutral-900">{selectedStudioDb}</h2>
 				</div>
 
 				<div class="flex items-center gap-2">
-					<!-- Tombol Toggle Live Sync Otomatis -->
-					<button
-						type="button"
-						onclick={() => {
-							isLiveSync = !isLiveSync;
-							if (isLiveSync) {
-								startLiveSyncInterval();
-								toast.info('Live Sync Aktif', { description: 'Data diperbarui otomatis tiap 3.5 detik.' });
-							} else {
-								stopLiveSyncInterval();
-								toast.info('Live Sync Dimatikan', { description: 'Mode pembaruan data manual.' });
-							}
-						}}
-						class="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-lg border transition cursor-pointer {isLiveSync
-							? 'bg-neutral-900 text-white border-neutral-900'
-							: 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'}"
-						title={isLiveSync ? 'Klik untuk mematikan auto-sync' : 'Klik untuk mengaktifkan auto-sync tiap 3.5s'}
-					>
-						<span class="w-2 h-2 rounded-full {isLiveSync ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-400'}"></span>
-						<span>{isLiveSync ? 'Auto-Sync: ON' : 'Auto-Sync: OFF'}</span>
-					</button>
-
-					{#if lastSyncedAt}
-						<span class="text-[10px] text-neutral-400 font-mono hidden sm:inline" title="Waktu sinkronisasi terakhir">
-							{lastSyncedAt}
-						</span>
-					{/if}
-
 					<button
 						type="button"
 						onclick={() => {
@@ -604,10 +571,10 @@
 							toast.success('Data Disegarkan', { description: 'Menyinkronkan data terbaru dari server.' });
 						}}
 						class="px-2.5 py-1 border border-neutral-200 rounded-lg hover:bg-neutral-100 text-neutral-700 text-xs font-medium transition cursor-pointer flex items-center gap-1.5"
-						title="Segarkan data sekarang (1 klik)"
+						title="Segarkan data sekarang"
 					>
 						<RefreshCwIcon class="w-3.5 h-3.5 {isLoadingStudio ? 'animate-spin' : ''}" />
-						<span class="hidden sm:inline">Segarkan</span>
+						<span>Segarkan</span>
 					</button>
 				</div>
 			</div>
@@ -637,7 +604,7 @@
 						</div>
 						<button
 							type="button"
-							onclick={openChangeDbPasswordModal}
+							onclick={handleGenerateAutomaticPassword}
 							class="text-[11px] px-2.5 py-1 border border-neutral-200 rounded-lg text-neutral-700 hover:bg-neutral-50 font-medium transition cursor-pointer"
 						>
 							Ubah Password
@@ -679,9 +646,9 @@
 				</div>
 			</div>
 
-			<!-- Workspace Tabel (Read-Only Viewer): Kiri Daftar Tabel, Kanan Isi Baris & Kolom -->
+			<!-- Workspace Tabel: Kiri Daftar Tabel, Kanan Isi Baris & Kolom -->
 			<div class="flex flex-col md:flex-row gap-4 items-start min-h-[440px]">
-				<!-- Sisi Kiri: Daftar Nama Tabel Saja (Read-Only) -->
+				<!-- Sisi Kiri: Daftar Nama Tabel Saja -->
 				<div class="w-full md:w-56 shrink-0 bg-white border border-neutral-200 rounded-xl flex flex-col overflow-hidden">
 					<div class="p-3 border-b border-neutral-100 flex items-center justify-between">
 						<span class="text-xs font-semibold text-neutral-900">Tabel</span>
@@ -705,191 +672,103 @@
 					</div>
 				</div>
 
-				<!-- Sisi Kanan: Isi Baris & Kolom Tabel Saja (Read-Only) -->
+				<!-- Sisi Kanan: Isi Baris & Kolom Tabel Saja -->
 				<div class="flex-1 w-full bg-white border border-neutral-200 rounded-xl flex flex-col overflow-hidden">
 					{#if !selectedTable}
 						<div class="p-12 text-center text-xs text-neutral-400">
 							Pilih tabel dari daftar di sebelah kiri untuk melihat isi baris dan kolom.
 						</div>
 					{:else}
-						<!-- Header Tabel: Nama Tabel, Tab Data / Indeks, & Aksi -->
+						<!-- Header Tabel: Nama Tabel, Jumlah Baris, & Tombol Perbarui Data -->
 						<div class="p-3.5 border-b border-neutral-100 flex items-center justify-between flex-wrap gap-2">
-							<div class="flex items-center gap-3">
+							<div class="flex items-center gap-2">
 								<h3 class="text-sm font-semibold text-neutral-900">{selectedTable}</h3>
-
-								<!-- Tab Switcher: Data vs Indeks B-Tree -->
-								<div class="flex items-center bg-neutral-100 p-0.5 rounded-lg text-xs">
-									<button
-										type="button"
-										onclick={() => (activeTableTab = 'data')}
-										class="px-2.5 py-1 rounded-md font-medium transition cursor-pointer {activeTableTab === 'data'
-											? 'bg-white text-neutral-900 shadow-xs'
-											: 'text-neutral-500 hover:text-neutral-900'}"
-									>
-										Data ({tableRows.length})
-									</button>
-									<button
-										type="button"
-										onclick={() => (activeTableTab = 'indexes')}
-										class="px-2.5 py-1 rounded-md font-medium transition cursor-pointer flex items-center gap-1.5 {activeTableTab === 'indexes'
-											? 'bg-white text-neutral-900 shadow-xs'
-											: 'text-neutral-500 hover:text-neutral-900'}"
-									>
-										<ZapIcon class="w-3 h-3 {tableIndexes.length > 0 ? 'text-amber-500' : 'text-neutral-400'}" />
-										<span>Indeks ({tableIndexes.length})</span>
-									</button>
-								</div>
-
-								{#if isLiveSync && activeTableTab === 'data'}
-									<span class="flex items-center gap-1 text-[10px] text-emerald-600 font-medium">
-										<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-										Live
-									</span>
-								{/if}
+								<span class="text-xs text-neutral-400 font-mono">({tableRows.length} baris)</span>
 							</div>
 
 							<div class="flex items-center gap-2">
-								{#if activeTableTab === 'indexes'}
-									<button
-										type="button"
-										onclick={openCreateIndexDialog}
-										class="px-3 py-1 bg-black hover:bg-neutral-800 text-white text-xs font-medium rounded-lg transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-									>
-										<ZapIcon class="w-3 h-3 text-amber-400" />
-										<span>+ Buat Indeks</span>
-									</button>
-								{:else}
-									<button
-										type="button"
-										onclick={() => {
-											loadTableData(selectedStudioDb, selectedTable, false);
-											toast.success('Tabel Disegarkan', { description: `Data tabel "${selectedTable}" diperbarui.` });
-										}}
-										class="px-2.5 py-1 border border-neutral-200 rounded-lg hover:bg-neutral-50 text-neutral-700 text-xs font-medium transition cursor-pointer flex items-center gap-1.5"
-										title="Segarkan data tabel ini sekarang"
-									>
-										<RefreshCwIcon class="w-3 h-3 {isLoadingTableData ? 'animate-spin' : ''}" />
-										<span>Perbarui Data</span>
-									</button>
-								{/if}
+								<button
+									type="button"
+									onclick={() => {
+										loadTableData(selectedStudioDb, selectedTable, false);
+										toast.success('Data Diperbarui', { description: `Data tabel "${selectedTable}" berhasil disinkronkan.` });
+									}}
+									class="px-2.5 py-1 border border-neutral-200 rounded-lg hover:bg-neutral-50 text-neutral-700 text-xs font-medium transition cursor-pointer flex items-center gap-1.5"
+									title="Segarkan data tabel ini sekarang"
+								>
+									<RefreshCwIcon class="w-3 h-3 {isLoadingTableData ? 'animate-spin' : ''}" />
+									<span>Perbarui Data</span>
+								</button>
 							</div>
 						</div>
 
-						<!-- KONTEN TAB 1: ISI DATA BARIS & KOLOM -->
-						{#if activeTableTab === 'data'}
-							<div class="overflow-x-auto">
-								<table class="w-full text-left border-collapse text-xs">
-									<thead>
-										<tr class="bg-neutral-50 border-b border-neutral-200">
-											{#each tableColumns as col (col.name)}
-												<th class="px-3.5 py-2.5 text-xs font-medium text-neutral-600 whitespace-nowrap">
-													<div class="flex items-center gap-1.5">
-														<span>{col.name}</span>
-														{#if col.isPrimary}
-															<span class="text-[9px] font-mono font-bold px-1 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200" title="Primary Key">PK</span>
-														{:else if col.isIndexed}
-															<span class="text-[9px] font-mono font-semibold px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200" title="Ter-indeks B-Tree (Pencarian Cepat)">IDX</span>
-														{/if}
-													</div>
-												</th>
-											{/each}
+						<!-- ISI DATA BARIS & KOLOM TABEL -->
+						<div class="overflow-x-auto">
+							<table class="w-full text-left border-collapse text-xs">
+								<thead>
+									<tr class="bg-neutral-50 border-b border-neutral-200">
+										{#each tableColumns as col (col.name)}
+											<th class="px-3.5 py-2.5 text-xs font-medium text-neutral-600 whitespace-nowrap">
+												<div class="flex items-center gap-1.5">
+													<span>{col.name}</span>
+													{#if col.isPrimary}
+														<span class="text-[10px] font-mono text-amber-600 font-medium" title="Primary Key">#pk</span>
+													{:else if col.isIndexed}
+														<span class="text-[10px] font-mono text-neutral-400 font-normal" title="Ter-indeks B-Tree">#idx</span>
+													{/if}
+												</div>
+											</th>
+										{/each}
+										<th class="px-3.5 py-2.5 text-xs font-medium text-neutral-600 text-right whitespace-nowrap">
+											Aksi
+										</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#if tableRows.length === 0}
+										<tr>
+											<td colspan={(tableColumns.length || 0) + 1} class="p-8 text-center text-xs text-neutral-400">
+												Tabel ini belum memiliki data baris.
+											</td>
 										</tr>
-									</thead>
-									<tbody>
-										{#if tableRows.length === 0}
-											<tr>
-												<td colspan={tableColumns.length || 1} class="p-8 text-center text-xs text-neutral-400">
-													Tabel ini belum memiliki data baris.
+									{:else}
+										{#each tableRows as row, idx (idx)}
+											<tr class="border-b border-neutral-100 hover:bg-neutral-50/60 transition">
+												{#each tableColumns as col (col.name)}
+													<td class="px-3.5 py-2.5 text-xs font-mono text-neutral-800 whitespace-nowrap max-w-xs truncate">
+														{#if row[col.name] === null || row[col.name] === undefined}
+															<span class="text-neutral-300 italic">null</span>
+														{:else}
+															{formatCellValue(row[col.name])}
+														{/if}
+													</td>
+												{/each}
+												<td class="px-3.5 py-2.5 text-xs whitespace-nowrap text-right">
+													<div class="flex items-center justify-end gap-1">
+														<button
+															type="button"
+															onclick={() => openEditRowModal(row)}
+															class="p-1.5 text-neutral-400 hover:text-black hover:bg-neutral-100 rounded-md transition cursor-pointer"
+															title="Ubah baris data"
+														>
+															<PencilIcon class="w-3.5 h-3.5" />
+														</button>
+														<button
+															type="button"
+															onclick={() => openDeleteRowModal(row)}
+															class="p-1.5 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer"
+															title="Hapus baris data"
+														>
+															<Trash2Icon class="w-3.5 h-3.5" />
+														</button>
+													</div>
 												</td>
 											</tr>
-										{:else}
-											{#each tableRows as row, idx (idx)}
-												<tr class="border-b border-neutral-100 hover:bg-neutral-50/60 transition">
-													{#each tableColumns as col (col.name)}
-														<td class="px-3.5 py-2.5 text-xs font-mono text-neutral-800 whitespace-nowrap max-w-xs truncate">
-															{#if row[col.name] === null || row[col.name] === undefined}
-																<span class="text-neutral-300 italic">null</span>
-															{:else}
-																{formatCellValue(row[col.name])}
-															{/if}
-														</td>
-													{/each}
-												</tr>
-											{/each}
-										{/if}
-									</tbody>
-								</table>
-							</div>
-
-						<!-- KONTEN TAB 2: DAFTAR INDEKS B-TREE PADA TABEL -->
-						{:else}
-							<div class="p-4 space-y-4">
-								<div class="flex items-center justify-between text-xs text-neutral-500 bg-neutral-50 p-3 rounded-lg border border-neutral-200">
-									<div class="flex items-center gap-2">
-										<ZapIcon class="w-4 h-4 text-amber-500 shrink-0" />
-										<span>Indeks B-Tree mengeliminasi Full Table Scan (pencarian lambat per baris) menjadi <strong>Index Scan instan O(log N)</strong>.</span>
-									</div>
-								</div>
-
-								{#if tableIndexes.length === 0}
-									<div class="p-8 text-center text-xs text-neutral-400 border border-dashed border-neutral-200 rounded-xl">
-										Belum ada indeks khusus pada tabel ini. Klik tombol <strong>+ Buat Indeks</strong> di atas untuk mempercepat query kolom.
-									</div>
-								{:else}
-									<div class="overflow-x-auto border border-neutral-200 rounded-xl">
-										<table class="w-full text-left border-collapse text-xs">
-											<thead>
-												<tr class="bg-neutral-50 border-b border-neutral-200 text-neutral-600 font-medium">
-													<th class="p-3">Nama Indeks</th>
-													<th class="p-3">Kolom Target</th>
-													<th class="p-3">Metode</th>
-													<th class="p-3">Tipe / Karakteristik</th>
-													<th class="p-3 text-right">Aksi</th>
-												</tr>
-											</thead>
-											<tbody>
-												{#each tableIndexes as idx (idx.name)}
-													<tr class="border-b border-neutral-100 hover:bg-neutral-50/60 transition font-mono">
-														<td class="p-3 font-semibold text-neutral-900">{idx.name}</td>
-														<td class="p-3 text-emerald-700 font-semibold">{idx.column}</td>
-														<td class="p-3 uppercase text-[11px] text-neutral-500">{idx.type || 'btree'}</td>
-														<td class="p-3">
-															{#if idx.isPrimary}
-																<span class="px-2 py-0.5 rounded-full text-[10px] font-sans font-medium bg-amber-50 text-amber-800 border border-amber-200">
-																	Primary Key
-																</span>
-															{:else if idx.isUnique}
-																<span class="px-2 py-0.5 rounded-full text-[10px] font-sans font-medium bg-purple-50 text-purple-700 border border-purple-200">
-																	Unique Index
-																</span>
-															{:else}
-																<span class="px-2 py-0.5 rounded-full text-[10px] font-sans font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-																	B-Tree Index
-																</span>
-															{/if}
-														</td>
-														<td class="p-3 text-right font-sans">
-															{#if !idx.isPrimary}
-																<button
-																	type="button"
-																	onclick={() => handleDropIndex(idx.name)}
-																	class="p-1.5 text-neutral-400 hover:text-rose-600 rounded transition cursor-pointer"
-																	title="Hapus indeks ini"
-																>
-																	<Trash2Icon class="w-3.5 h-3.5" />
-																</button>
-															{:else}
-																<span class="text-[11px] text-neutral-400 italic">Terkunci (PK)</span>
-															{/if}
-														</td>
-													</tr>
-												{/each}
-											</tbody>
-										</table>
-									</div>
-								{/if}
-							</div>
-						{/if}
+										{/each}
+									{/if}
+								</tbody>
+							</table>
+						</div>
 					{/if}
 				</div>
 			</div>
@@ -898,93 +777,69 @@
 </div>
 
 <!-- ========================================== -->
-<!-- MODAL: UBAH PASSWORD DATABASE              -->
+<!-- MODAL: UBAH PASSWORD DATABASE OTOMATIS     -->
 <!-- ========================================== -->
 <Dialog.Root bind:open={showChangeDbPasswordModal}>
-	<Dialog.Content class="sm:max-w-sm bg-white border border-neutral-200 rounded-xl p-5 shadow-xl">
+	<Dialog.Content class="sm:max-w-md bg-white border border-neutral-200 rounded-xl p-5 shadow-xl">
 		<Dialog.Header class="pb-2 border-b border-neutral-100">
-			<Dialog.Title class="text-sm font-semibold text-neutral-900">Ubah Password Database</Dialog.Title>
+			<Dialog.Title class="text-sm font-semibold text-neutral-900 flex items-center gap-2">
+				<ShieldCheckIcon class="w-4 h-4 text-emerald-600" />
+				<span>Password Database Otomatis</span>
+			</Dialog.Title>
+			<Dialog.Description class="text-xs text-neutral-500">
+				Sistem telah menghasilkan password baru dengan standar keamanan tinggi (24 karakter acak). Password ini telah diterapkan pada Connection String.
+			</Dialog.Description>
 		</Dialog.Header>
 
-		{#if dbPasswordError}
-			<div class="text-xs text-rose-600 bg-rose-50 p-2 rounded-lg border border-rose-200 my-2">
-				{dbPasswordError}
-			</div>
-		{/if}
-
-		<form onsubmit={handleSaveCustomPassword} class="space-y-3 pt-2">
-			<div>
-				<label for="db-new-pw" class="text-xs text-neutral-600 block mb-1">Password Baru</label>
-				<div class="relative">
-					<Input
-						id="db-new-pw"
-						type={showInputCustomPassword ? 'text' : 'password'}
-						placeholder="Password baru..."
-						bind:value={inputCustomPassword}
-						required
-						class="text-xs border-neutral-200 pr-9"
+		<div class="space-y-4 pt-3">
+			<div class="space-y-1.5">
+				<label for="auto-gen-pw-input" class="text-xs font-medium text-neutral-700">Password Baru</label>
+				<div class="relative flex items-center">
+					<input
+						id="auto-gen-pw-input"
+						type="text"
+						readonly
+						value={generatedPasswordDisplay}
+						class="w-full text-xs font-mono bg-neutral-50 border border-neutral-200 rounded-lg p-2.5 pr-20 text-neutral-900 select-all focus:outline-none"
 					/>
 					<button
 						type="button"
-						onclick={() => (showInputCustomPassword = !showInputCustomPassword)}
-						class="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 transition focus:outline-none cursor-pointer p-0.5 rounded"
-						title={showInputCustomPassword ? 'Sembunyikan password' : 'Lihat password'}
-						aria-label={showInputCustomPassword ? 'Sembunyikan password' : 'Lihat password'}
+						onclick={copyGeneratedPassword}
+						class="absolute right-1.5 px-2.5 py-1 text-xs bg-neutral-900 hover:bg-black text-white font-medium rounded-md transition flex items-center gap-1 cursor-pointer"
 					>
-						{#if showInputCustomPassword}
-							<EyeOffIcon class="w-4 h-4" />
+						{#if copiedGeneratedPassword}
+							<CheckIcon class="w-3.5 h-3.5 text-white" />
+							<span>Tersalin</span>
 						{:else}
-							<EyeIcon class="w-4 h-4" />
+							<CopyIcon class="w-3.5 h-3.5" />
+							<span>Salin</span>
 						{/if}
 					</button>
 				</div>
-			</div>
-			<div>
-				<label for="db-confirm-pw" class="text-xs text-neutral-600 block mb-1">Konfirmasi Password Baru</label>
-				<div class="relative">
-					<Input
-						id="db-confirm-pw"
-						type={showInputCustomPasswordConfirm ? 'text' : 'password'}
-						placeholder="Ulangi password baru..."
-						bind:value={inputCustomPasswordConfirm}
-						required
-						class="text-xs border-neutral-200 pr-9"
-					/>
-					<button
-						type="button"
-						onclick={() => (showInputCustomPasswordConfirm = !showInputCustomPasswordConfirm)}
-						class="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 transition focus:outline-none cursor-pointer p-0.5 rounded"
-						title={showInputCustomPasswordConfirm ? 'Sembunyikan password' : 'Lihat password'}
-						aria-label={showInputCustomPasswordConfirm ? 'Sembunyikan password' : 'Lihat password'}
-					>
-						{#if showInputCustomPasswordConfirm}
-							<EyeOffIcon class="w-4 h-4" />
-						{:else}
-							<EyeIcon class="w-4 h-4" />
-						{/if}
-					</button>
-				</div>
+				<p class="text-[11px] text-neutral-400">
+					Kombinasi huruf besar, kecil, angka, dan simbol kriptografis kuat tanpa karakter ambigu.
+				</p>
 			</div>
 
-			<Dialog.Footer class="pt-3 flex justify-end gap-2 border-t border-neutral-100">
+			<Dialog.Footer class="pt-3 border-t border-neutral-100 flex items-center justify-between">
+				<button
+					type="button"
+					onclick={handleGenerateAutomaticPassword}
+					class="text-xs text-neutral-600 hover:text-black font-medium transition cursor-pointer flex items-center gap-1.5"
+				>
+					<RefreshCwIcon class="w-3 h-3" />
+					<span>Acak Ulang</span>
+				</button>
 				<Button
 					type="button"
-					variant="outline"
 					size="sm"
 					onclick={() => (showChangeDbPasswordModal = false)}
-					class="text-xs border-neutral-200 text-neutral-700 hover:bg-neutral-50"
+					class="text-xs bg-black text-white hover:bg-neutral-800 cursor-pointer"
 				>
-					Batal
-				</Button>
-				<Button
-					type="submit"
-					size="sm"
-					class="text-xs bg-black text-white hover:bg-neutral-800"
-				>
-					Simpan
+					Selesai
 				</Button>
 			</Dialog.Footer>
-		</form>
+		</div>
 	</Dialog.Content>
 </Dialog.Root>
 
@@ -1030,7 +885,7 @@
 					type="submit"
 					size="sm"
 					disabled={isCreatingDb || !newDbName.trim()}
-					class="text-xs bg-black text-white hover:bg-neutral-800 min-w-20 flex items-center justify-center"
+					class="text-xs bg-black text-white hover:bg-neutral-800 min-w-20 flex items-center justify-center cursor-pointer"
 				>
 					{#if isCreatingDb}
 						<Spinner size="xs" class="text-white" />
@@ -1069,7 +924,7 @@
 				type="button"
 				onclick={handleDeleteProject}
 				disabled={isDeletingProject}
-				class="text-xs bg-rose-600 hover:bg-rose-700 text-white font-medium px-3 py-1.5 rounded-md transition cursor-pointer min-w-24 flex items-center justify-center"
+				class="text-xs bg-rose-600 hover:bg-rose-700 text-white font-medium px-3.5 py-1.5 rounded-md transition cursor-pointer min-w-24 flex items-center justify-center"
 			>
 				{#if isDeletingProject}
 					<Spinner size="xs" class="text-white" />
@@ -1082,56 +937,63 @@
 </AlertDialog.Root>
 
 <!-- ========================================== -->
-<!-- MODAL: BUAT INDEKS B-TREE BARU             -->
+<!-- MODAL: UBAH DATA BARIS (EDIT ROW)          -->
 <!-- ========================================== -->
-<Dialog.Root bind:open={showCreateIndexDialog}>
-	<Dialog.Content class="sm:max-w-md bg-white border border-neutral-200 rounded-xl p-5 shadow-xl">
-		<Dialog.Header class="pb-2 border-b border-neutral-100">
+<Dialog.Root bind:open={showEditRowDialog}>
+	<Dialog.Content class="sm:max-w-lg bg-white border border-neutral-200 rounded-xl p-5 shadow-xl max-h-[85vh] flex flex-col">
+		<Dialog.Header class="pb-2 border-b border-neutral-100 shrink-0">
 			<Dialog.Title class="text-sm font-semibold text-neutral-900 flex items-center gap-2">
-				<ZapIcon class="w-4 h-4 text-amber-500" />
-				<span>Buat Indeks B-Tree Cepat</span>
+				<PencilIcon class="w-4 h-4 text-neutral-700" />
+				<span>Ubah Data Baris</span>
 			</Dialog.Title>
 			<Dialog.Description class="text-xs text-neutral-500">
-				Terapkan indeks B-Tree pada kolom tabel <span class="font-semibold text-neutral-800">"{selectedTable}"</span> untuk mengeliminasi Sequential Scan dan melesatkan performa query.
+				Tabel: <span class="font-medium text-neutral-800">{selectedTable}</span> | {primaryKey}: <span class="font-mono text-neutral-800">{rowBeingEdited?.[primaryKey]}</span>
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<form onsubmit={handleCreateIndex} class="space-y-4 pt-3">
-			<div class="space-y-1.5">
-				<label for="index-target-col" class="text-xs font-medium text-neutral-700">Pilih Kolom Target</label>
-				<select
-					id="index-target-col"
-					bind:value={selectedIndexCol}
-					required
-					class="w-full text-xs font-mono border border-neutral-200 rounded-lg p-2.5 bg-white text-neutral-800 focus:outline-none focus:ring-1 focus:ring-neutral-900"
-				>
-					{#each tableColumns as col}
-						<option value={col.name}>
-							{col.name} ({col.type}) {col.isPrimary ? '- [Primary Key]' : col.isIndexed ? '- [Sudah Ada Indeks]' : ''}
-						</option>
-					{/each}
-				</select>
+		<form onsubmit={handleSaveRowEdit} class="flex flex-col flex-1 overflow-hidden pt-3">
+			<div class="overflow-y-auto pr-1 space-y-3 flex-1 max-h-[50vh]">
+				{#each tableColumns as col (col.name)}
+					<div>
+						<div class="flex items-center justify-between mb-1">
+							<label for="edit-col-{col.name}" class="text-xs font-medium text-neutral-700 flex items-center gap-1.5">
+								<span>{col.name}</span>
+								{#if col.isPrimary}
+									<span class="text-[10px] font-mono text-amber-600 font-medium">#pk</span>
+								{:else if col.isIndexed}
+									<span class="text-[10px] font-mono text-neutral-400">#idx</span>
+								{/if}
+							</label>
+							<span class="text-[10px] text-neutral-400 font-mono">{col.type}</span>
+						</div>
+
+						{#if col.isPrimary}
+							<Input
+								id="edit-col-{col.name}"
+								type="text"
+								value={editRowData[col.name]}
+								disabled
+								class="text-xs bg-neutral-100 text-neutral-500 font-mono border-neutral-200 cursor-not-allowed"
+							/>
+						{:else}
+							<Input
+								id="edit-col-{col.name}"
+								type="text"
+								bind:value={editRowData[col.name]}
+								class="text-xs border-neutral-200 font-mono"
+								placeholder={`Nilai untuk ${col.name}...`}
+							/>
+						{/if}
+					</div>
+				{/each}
 			</div>
 
-			<div class="flex items-start gap-2.5 p-3 rounded-lg bg-neutral-50 border border-neutral-200">
-				<input
-					type="checkbox"
-					id="is-unique-idx"
-					bind:checked={isUniqueIndex}
-					class="mt-0.5 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900"
-				/>
-				<label for="is-unique-idx" class="text-xs text-neutral-700 cursor-pointer">
-					<span class="font-semibold block">Unique Index (Nilai Unik)</span>
-					<span class="text-neutral-500 text-[11px] block">Mencegah data duplikat pada kolom ini sekaligus meng-index pencarian.</span>
-				</label>
-			</div>
-
-			<Dialog.Footer class="pt-3 border-t border-neutral-100 flex justify-end gap-2">
+			<Dialog.Footer class="pt-4 border-t border-neutral-100 flex justify-end gap-2 shrink-0 mt-3">
 				<Button
 					type="button"
 					variant="outline"
 					size="sm"
-					onclick={() => (showCreateIndexDialog = false)}
+					onclick={() => (showEditRowDialog = false)}
 					class="text-xs border-neutral-200 text-neutral-700 hover:bg-neutral-50"
 				>
 					Batal
@@ -1139,16 +1001,48 @@
 				<Button
 					type="submit"
 					size="sm"
-					disabled={isCreatingIndex || !selectedIndexCol}
-					class="text-xs bg-black text-white hover:bg-neutral-800 min-w-28 flex items-center justify-center cursor-pointer"
+					disabled={isUpdatingRow}
+					class="text-xs bg-black text-white hover:bg-neutral-800 min-w-20 flex items-center justify-center cursor-pointer"
 				>
-					{#if isCreatingIndex}
+					{#if isUpdatingRow}
 						<Spinner size="xs" class="text-white" />
 					{:else}
-						<span>Terapkan Indeks</span>
+						Simpan
 					{/if}
 				</Button>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>
 </Dialog.Root>
+
+<!-- ========================================== -->
+<!-- MODAL: HAPUS BARIS DATA (DELETE ROW)       -->
+<!-- ========================================== -->
+<AlertDialog.Root bind:open={showDeleteRowDialog}>
+	<AlertDialog.Content class="sm:max-w-sm bg-white border border-neutral-200 rounded-xl p-5 shadow-xl">
+		<AlertDialog.Header class="pb-2">
+			<AlertDialog.Title class="text-sm font-semibold text-neutral-900">Hapus Baris Data</AlertDialog.Title>
+			<AlertDialog.Description class="text-xs text-neutral-500">
+				Apakah Anda yakin ingin menghapus baris dengan {primaryKey || 'id'}: <span class="font-mono font-semibold text-neutral-900">{rowBeingDeleted?.[primaryKey || 'id']}</span> pada tabel <span class="font-semibold text-neutral-900">{selectedTable}</span>? Tindakan ini tidak dapat dibatalkan.
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+
+		<AlertDialog.Footer class="pt-3 flex justify-end gap-2 border-t border-neutral-100">
+			<AlertDialog.Cancel class="text-xs border-neutral-200 text-neutral-700 hover:bg-neutral-50">
+				Batal
+			</AlertDialog.Cancel>
+			<button
+				type="button"
+				onclick={handleConfirmDeleteRow}
+				disabled={isDeletingRow}
+				class="text-xs bg-rose-600 hover:bg-rose-700 text-white font-medium px-3.5 py-1.5 rounded-md transition cursor-pointer min-w-20 flex items-center justify-center"
+			>
+				{#if isDeletingRow}
+					<Spinner size="xs" class="text-white" />
+				{:else}
+					Hapus
+				{/if}
+			</button>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
