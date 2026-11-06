@@ -3,17 +3,23 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
+	import EyeIcon from '@lucide/svelte/icons/eye';
+	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 
 	let { open = $bindable(false), currentAdmin = null } = $props();
 
 	let newPassword = $state('');
 	let confirmPassword = $state('');
+	let showNewPassword = $state(false);
+	let showConfirmPassword = $state(false);
 	let isSubmitting = $state(false);
 	let feedback = $state({ type: '', message: '' });
 
 	function resetForm() {
 		newPassword = '';
 		confirmPassword = '';
+		showNewPassword = false;
+		showConfirmPassword = false;
 		feedback = { type: '', message: '' };
 	}
 
@@ -108,30 +114,60 @@
 				<label for="admin-new-pw" class="text-xs text-neutral-600 block mb-1">
 					Password Baru (Min. 6 Karakter)
 				</label>
-				<Input
-					id="admin-new-pw"
-					type="password"
-					placeholder="Masukkan password baru..."
-					bind:value={newPassword}
-					required
-					minlength="6"
-					class="text-xs border-neutral-200"
-				/>
+				<div class="relative">
+					<Input
+						id="admin-new-pw"
+						type={showNewPassword ? 'text' : 'password'}
+						placeholder="Masukkan password baru..."
+						bind:value={newPassword}
+						required
+						minlength="6"
+						class="text-xs border-neutral-200 pr-9"
+					/>
+					<button
+						type="button"
+						onclick={() => (showNewPassword = !showNewPassword)}
+						class="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 transition focus:outline-none cursor-pointer p-0.5 rounded"
+						title={showNewPassword ? 'Sembunyikan password' : 'Lihat password'}
+						aria-label={showNewPassword ? 'Sembunyikan password' : 'Lihat password'}
+					>
+						{#if showNewPassword}
+							<EyeOffIcon class="w-4 h-4" />
+						{:else}
+							<EyeIcon class="w-4 h-4" />
+						{/if}
+					</button>
+				</div>
 			</div>
 
 			<div>
 				<label for="admin-confirm-pw" class="text-xs text-neutral-600 block mb-1">
 					Konfirmasi Password Baru
 				</label>
-				<Input
-					id="admin-confirm-pw"
-					type="password"
-					placeholder="Ulangi password baru..."
-					bind:value={confirmPassword}
-					required
-					minlength="6"
-					class="text-xs border-neutral-200"
-				/>
+				<div class="relative">
+					<Input
+						id="admin-confirm-pw"
+						type={showConfirmPassword ? 'text' : 'password'}
+						placeholder="Ulangi password baru..."
+						bind:value={confirmPassword}
+						required
+						minlength="6"
+						class="text-xs border-neutral-200 pr-9"
+					/>
+					<button
+						type="button"
+						onclick={() => (showConfirmPassword = !showConfirmPassword)}
+						class="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 transition focus:outline-none cursor-pointer p-0.5 rounded"
+						title={showConfirmPassword ? 'Sembunyikan password' : 'Lihat password'}
+						aria-label={showConfirmPassword ? 'Sembunyikan password' : 'Lihat password'}
+					>
+						{#if showConfirmPassword}
+							<EyeOffIcon class="w-4 h-4" />
+						{:else}
+							<EyeIcon class="w-4 h-4" />
+						{/if}
+					</button>
+				</div>
 			</div>
 
 			<Dialog.Footer class="pt-3 flex justify-end gap-2 border-t border-neutral-100">

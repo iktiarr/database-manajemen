@@ -40,6 +40,8 @@
 	let showChangeDbPasswordModal = $state(false);
 	let inputCustomPassword = $state('');
 	let inputCustomPasswordConfirm = $state('');
+	let showInputCustomPassword = $state(false);
+	let showInputCustomPasswordConfirm = $state(false);
 	let dbPasswordError = $state('');
 
 	// Project Creation Dialog
@@ -161,6 +163,8 @@
 	function openChangeDbPasswordModal() {
 		inputCustomPassword = '';
 		inputCustomPasswordConfirm = '';
+		showInputCustomPassword = false;
+		showInputCustomPasswordConfirm = false;
 		dbPasswordError = '';
 		showChangeDbPasswordModal = true;
 	}
@@ -618,25 +622,55 @@
 		<form onsubmit={handleSaveCustomPassword} class="space-y-3 pt-2">
 			<div>
 				<label for="db-new-pw" class="text-xs text-neutral-600 block mb-1">Password Baru</label>
-				<Input
-					id="db-new-pw"
-					type="password"
-					placeholder="Password baru..."
-					bind:value={inputCustomPassword}
-					required
-					class="text-xs border-neutral-200"
-				/>
+				<div class="relative">
+					<Input
+						id="db-new-pw"
+						type={showInputCustomPassword ? 'text' : 'password'}
+						placeholder="Password baru..."
+						bind:value={inputCustomPassword}
+						required
+						class="text-xs border-neutral-200 pr-9"
+					/>
+					<button
+						type="button"
+						onclick={() => (showInputCustomPassword = !showInputCustomPassword)}
+						class="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 transition focus:outline-none cursor-pointer p-0.5 rounded"
+						title={showInputCustomPassword ? 'Sembunyikan password' : 'Lihat password'}
+						aria-label={showInputCustomPassword ? 'Sembunyikan password' : 'Lihat password'}
+					>
+						{#if showInputCustomPassword}
+							<EyeOffIcon class="w-4 h-4" />
+						{:else}
+							<EyeIcon class="w-4 h-4" />
+						{/if}
+					</button>
+				</div>
 			</div>
 			<div>
 				<label for="db-confirm-pw" class="text-xs text-neutral-600 block mb-1">Konfirmasi Password Baru</label>
-				<Input
-					id="db-confirm-pw"
-					type="password"
-					placeholder="Ulangi password baru..."
-					bind:value={inputCustomPasswordConfirm}
-					required
-					class="text-xs border-neutral-200"
-				/>
+				<div class="relative">
+					<Input
+						id="db-confirm-pw"
+						type={showInputCustomPasswordConfirm ? 'text' : 'password'}
+						placeholder="Ulangi password baru..."
+						bind:value={inputCustomPasswordConfirm}
+						required
+						class="text-xs border-neutral-200 pr-9"
+					/>
+					<button
+						type="button"
+						onclick={() => (showInputCustomPasswordConfirm = !showInputCustomPasswordConfirm)}
+						class="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 transition focus:outline-none cursor-pointer p-0.5 rounded"
+						title={showInputCustomPasswordConfirm ? 'Sembunyikan password' : 'Lihat password'}
+						aria-label={showInputCustomPasswordConfirm ? 'Sembunyikan password' : 'Lihat password'}
+					>
+						{#if showInputCustomPasswordConfirm}
+							<EyeOffIcon class="w-4 h-4" />
+						{:else}
+							<EyeIcon class="w-4 h-4" />
+						{/if}
+					</button>
+				</div>
 			</div>
 
 			<Dialog.Footer class="pt-3 flex justify-end gap-2 border-t border-neutral-100">
