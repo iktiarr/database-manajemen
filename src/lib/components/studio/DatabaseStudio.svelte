@@ -256,7 +256,7 @@
 
 		const cleanName = newDbName.trim();
 		if (!cleanName || !/^[a-zA-Z0-9_]+$/.test(cleanName)) {
-			dbCreateError = 'Nama project hanya boleh berupa huruf, angka, atau underscore.';
+			dbCreateError = 'Nama proyek hanya boleh berupa huruf, angka, atau underscore.';
 			return;
 		}
 
@@ -273,7 +273,7 @@
 
 			const result = await res.json();
 			if (!res.ok) {
-				throw new Error(result.error || 'Gagal membuat project.');
+				throw new Error(result.error || 'Gagal membuat proyek.');
 			}
 
 			if (!databases.some((d) => d.name === cleanName)) {
@@ -312,7 +312,7 @@
 
 			const result = await res.json();
 			if (!res.ok) {
-				throw new Error(result.error || 'Gagal menghapus project.');
+				throw new Error(result.error || 'Gagal menghapus proyek.');
 			}
 
 			databases = databases.filter((d) => d.name !== projectToDelete);
@@ -348,13 +348,13 @@
 		<div class="space-y-6">
 			<!-- Header List: Simple & Clean -->
 			<div class="flex items-center justify-between pb-4 border-b border-neutral-200">
-				<h1 class="text-xl font-bold tracking-tight text-neutral-900">Projects</h1>
+				<h1 class="text-xl font-bold tracking-tight text-neutral-900">Proyek</h1>
 				<div class="flex items-center gap-2">
 					<button
 						type="button"
 						onclick={refreshDatabasesList}
 						class="p-2 border border-neutral-200 rounded-lg hover:bg-neutral-100 text-neutral-700 transition cursor-pointer"
-						title="Refresh"
+						title="Segarkan"
 					>
 						<RefreshCwIcon class="w-4 h-4 {isRefreshingDbs ? 'animate-spin' : ''}" />
 					</button>
@@ -363,7 +363,7 @@
 						onclick={() => (showCreateDbDialog = true)}
 						class="px-3.5 py-2 bg-black hover:bg-neutral-800 text-white text-xs font-medium rounded-lg transition cursor-pointer"
 					>
-						+ Tambah Project
+						+ Tambah Proyek
 					</button>
 				</div>
 			</div>
@@ -372,8 +372,8 @@
 			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 				{#if userProjects.length === 0}
 					<div class="col-span-full py-12 text-center border border-dashed border-neutral-200 rounded-xl bg-neutral-50/50">
-						<p class="text-xs text-neutral-500 font-medium">Belum ada project yang dibuat.</p>
-						<p class="text-[11px] text-neutral-400 mt-1">Klik tombol "+ Tambah Project" di atas untuk membuat project pertama Anda.</p>
+						<p class="text-xs text-neutral-500 font-medium">Belum ada proyek yang dibuat.</p>
+						<p class="text-[11px] text-neutral-400 mt-1">Klik tombol "+ Tambah Proyek" di atas untuk membuat proyek pertama Anda.</p>
 					</div>
 				{:else}
 					{#each userProjects as db (db.name)}
@@ -394,7 +394,7 @@
 									type="button"
 									onclick={() => openDeleteProjectDialog(db.name)}
 									class="py-2 px-3 border border-neutral-200 hover:border-rose-300 hover:bg-rose-50 text-neutral-500 hover:text-rose-600 text-xs font-medium rounded-lg transition cursor-pointer"
-									title="Hapus Project"
+									title="Hapus Proyek"
 								>
 									Hapus
 								</button>
@@ -430,7 +430,7 @@
 						type="button"
 						onclick={() => loadStudioTables(selectedStudioDb)}
 						class="p-2 border border-neutral-200 rounded-lg hover:bg-neutral-100 text-neutral-700 transition cursor-pointer"
-						title="Refresh"
+						title="Segarkan"
 					>
 						<RefreshCwIcon class="w-4 h-4 {isLoadingStudio ? 'animate-spin' : ''}" />
 					</button>
@@ -549,7 +549,7 @@
 									type="button"
 									onclick={() => loadTableData(selectedStudioDb, selectedTable)}
 									class="p-1.5 border border-neutral-200 rounded-lg hover:bg-neutral-50 text-neutral-700 transition cursor-pointer"
-									title="Refresh data tabel"
+									title="Segarkan data tabel"
 								>
 									<RefreshCwIcon class="w-3.5 h-3.5 {isLoadingTableData ? 'animate-spin' : ''}" />
 								</button>
@@ -662,12 +662,12 @@
 </Dialog.Root>
 
 <!-- ========================================== -->
-<!-- MODAL: TAMBAH PROJECT BARU                 -->
+<!-- MODAL: TAMBAH PROYEK BARU                 -->
 <!-- ========================================== -->
 <Dialog.Root bind:open={showCreateDbDialog}>
 	<Dialog.Content class="sm:max-w-sm bg-white border border-neutral-200 rounded-xl p-5 shadow-xl">
 		<Dialog.Header class="pb-2 border-b border-neutral-100">
-			<Dialog.Title class="text-sm font-semibold text-neutral-900">Tambah Project Baru</Dialog.Title>
+			<Dialog.Title class="text-sm font-semibold text-neutral-900">Tambah Proyek Baru</Dialog.Title>
 		</Dialog.Header>
 
 		{#if dbCreateError}
@@ -678,7 +678,7 @@
 
 		<form onsubmit={handleCreateProject} class="space-y-3 pt-2">
 			<div>
-				<label for="new-project-name" class="text-xs text-neutral-600 block mb-1">Nama Project</label>
+				<label for="new-project-name" class="text-xs text-neutral-600 block mb-1">Nama Proyek</label>
 				<Input
 					id="new-project-name"
 					type="text"
@@ -705,7 +705,7 @@
 					disabled={isCreatingDb || !newDbName.trim()}
 					class="text-xs bg-black text-white hover:bg-neutral-800"
 				>
-					{isCreatingDb ? 'Membuat...' : 'Buat Project'}
+					{isCreatingDb ? 'Membuat...' : 'Buat Proyek'}
 				</Button>
 			</Dialog.Footer>
 		</form>
@@ -713,14 +713,14 @@
 </Dialog.Root>
 
 <!-- ========================================== -->
-<!-- MODAL: HAPUS PROJECT (ALERT DIALOG)        -->
+<!-- MODAL: HAPUS PROYEK (ALERT DIALOG)        -->
 <!-- ========================================== -->
 <AlertDialog.Root bind:open={showDeleteProjectDialog}>
 	<AlertDialog.Content class="sm:max-w-sm bg-white border border-neutral-200 rounded-xl p-5 shadow-xl">
 		<AlertDialog.Header class="pb-2">
-			<AlertDialog.Title class="text-sm font-semibold text-neutral-900">Hapus Project</AlertDialog.Title>
+			<AlertDialog.Title class="text-sm font-semibold text-neutral-900">Hapus Proyek</AlertDialog.Title>
 			<AlertDialog.Description class="text-xs text-neutral-500">
-				Apakah Anda yakin ingin menghapus project <span class="font-semibold text-neutral-900">"{projectToDelete}"</span>? Seluruh database dan tabel di dalamnya akan dihapus secara permanen.
+				Apakah Anda yakin ingin menghapus proyek <span class="font-semibold text-neutral-900">"{projectToDelete}"</span>? Seluruh database dan tabel di dalamnya akan dihapus secara permanen.
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 
@@ -740,7 +740,7 @@
 				disabled={isDeletingProject}
 				class="text-xs bg-rose-600 hover:bg-rose-700 text-white font-medium px-3 py-1.5 rounded-md transition cursor-pointer"
 			>
-				{isDeletingProject ? 'Menghapus...' : 'Hapus Project'}
+				{isDeletingProject ? 'Menghapus...' : 'Hapus Proyek'}
 			</button>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

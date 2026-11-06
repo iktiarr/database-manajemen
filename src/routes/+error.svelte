@@ -39,15 +39,15 @@
 				onclick={() => window.location.reload()}
 			>
 				<RefreshCwIcon class="w-3.5 h-3.5" />
-				Refresh Halaman
+				Muat Ulang Halaman
 			</Button>
 
 			<Button
-				class="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-2"
+				class="w-full sm:w-auto rounded-xl bg-black hover:bg-neutral-800 text-white text-xs font-semibold gap-2"
 				onclick={() => window.location.href = '/'}
 			>
 				<HomeIcon class="w-3.5 h-3.5" />
-				Ke Dashboard
+				Kembali ke Dashboard
 			</Button>
 		</div>
 	</Card.Root>

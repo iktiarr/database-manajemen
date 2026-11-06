@@ -27,7 +27,7 @@ export async function GET({ request, locals }) {
 		return json({ databases: res.rows }, { status: 200 });
 	} catch (err) {
 		console.error('List databases error:', err);
-		return json({ error: err.message || 'Failed to list databases' }, { status: 500 });
+		return json({ error: err.message || 'Gagal memuat daftar database' }, { status: 500 });
 	}
 }
 
@@ -48,7 +48,7 @@ export async function POST({ request, locals }) {
 	try {
 		body = await request.json();
 	} catch {
-		return json({ error: 'Bad Request: Invalid JSON body' }, { status: 400 });
+		return json({ error: 'Permintaan tidak valid: Format JSON tidak valid' }, { status: 400 });
 	}
 
 	const { dbName } = body || {};
@@ -57,7 +57,7 @@ export async function POST({ request, locals }) {
 	if (!dbName || typeof dbName !== 'string' || !/^[a-zA-Z0-9_]+$/.test(dbName)) {
 		return json(
 			{
-				error: 'Bad Request: "dbName" is required and must only contain alphanumeric characters and underscores (/^[a-zA-Z0-9_]+$/)'
+				error: 'Permintaan tidak valid: "dbName" wajib diisi dan hanya boleh berupa huruf, angka, serta underscore'
 			},
 			{ status: 400 }
 		);
@@ -69,7 +69,7 @@ export async function POST({ request, locals }) {
 		return json(
 			{
 				success: true,
-				message: `Database "${dbName}" created successfully`
+				message: `Database "${dbName}" berhasil dibuat.`
 			},
 			{ status: 200 }
 		);
@@ -77,7 +77,7 @@ export async function POST({ request, locals }) {
 		console.error(`Error creating database "${dbName}":`, err);
 		return json(
 			{
-				error: err.message || 'Failed to create database'
+				error: err.message || 'Gagal membuat database'
 			},
 			{ status: 500 }
 		);
@@ -100,7 +100,7 @@ export async function DELETE({ request, locals }) {
 	try {
 		body = await request.json();
 	} catch {
-		return json({ error: 'Bad Request: Invalid JSON body' }, { status: 400 });
+		return json({ error: 'Permintaan tidak valid: Format JSON tidak valid' }, { status: 400 });
 	}
 
 	const { dbName } = body || {};
@@ -116,9 +116,9 @@ export async function DELETE({ request, locals }) {
 	try {
 		await closeTargetPool(dbName);
 		await adminPool.query(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
-		return json({ success: true, message: `Project "${dbName}" berhasil dihapus.` });
+		return json({ success: true, message: `Proyek "${dbName}" berhasil dihapus.` });
 	} catch (err) {
 		console.error(`Error deleting database "${dbName}":`, err);
-		return json({ error: err.message || 'Gagal menghapus database project' }, { status: 500 });
+		return json({ error: err.message || 'Gagal menghapus database proyek' }, { status: 500 });
 	}
 }

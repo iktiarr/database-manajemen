@@ -17,7 +17,7 @@
 		<!-- Judul & Deskripsi Singkat -->
 		<div class="text-center space-y-1">
 			<h1 class="text-xl font-semibold tracking-tight text-neutral-900">Database Gateway</h1>
-			<p class="text-xs text-neutral-500">Management Console</p>
+			<p class="text-xs text-neutral-500">Konsol Manajemen</p>
 		</div>
 
 		<!-- Form Login -->

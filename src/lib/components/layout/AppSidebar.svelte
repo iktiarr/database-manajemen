@@ -24,7 +24,7 @@
 	<Sidebar.Header class="p-5 border-b border-neutral-100">
 		<div>
 			<h1 class="text-sm font-semibold tracking-tight text-neutral-900">Database Gateway</h1>
-			<p class="text-[11px] text-neutral-400 font-normal">Management Console</p>
+			<p class="text-[11px] text-neutral-400 font-normal">Konsol Manajemen</p>
 		</div>
 	</Sidebar.Header>
 
@@ -43,7 +43,7 @@
 							? 'bg-black text-white font-semibold'
 							: 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}"
 					>
-						<span>Projects</span>
+						<span>Proyek</span>
 					</Sidebar.MenuButton>
 				</Sidebar.MenuItem>
 
@@ -55,7 +55,7 @@
 							? 'bg-black text-white font-semibold'
 							: 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}"
 					>
-						<span>Master Admins</span>
+						<span>Kelola Admin</span>
 					</Sidebar.MenuButton>
 				</Sidebar.MenuItem>
 
@@ -67,7 +67,7 @@
 							? 'bg-black text-white font-semibold'
 							: 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}"
 					>
-						<span>API Key & Settings</span>
+						<span>API Key & Pengaturan</span>
 					</Sidebar.MenuButton>
 				</Sidebar.MenuItem>
 			</Sidebar.Menu>

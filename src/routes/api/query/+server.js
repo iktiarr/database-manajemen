@@ -12,7 +12,7 @@ export async function POST({ request }) {
 	const masterKey = env.APP_MASTER_KEY || process.env.APP_MASTER_KEY;
 
 	if (!masterKey || !authHeader || authHeader !== `Bearer ${masterKey}`) {
-		return json({ error: 'Unauthorized: Missing or invalid Master API Key' }, { status: 401 });
+		return json({ error: 'Tidak diizinkan: Master API Key tidak ditemukan atau tidak valid' }, { status: 401 });
 	}
 
 	// 2. Validasi header database target
@@ -20,7 +20,7 @@ export async function POST({ request }) {
 	if (!dbName || !/^[a-zA-Z0-9_]+$/.test(dbName)) {
 		return json(
 			{
-				error: 'Bad Request: "x-database-name" header is required and must only contain alphanumeric characters and underscores'
+				error: 'Permintaan tidak valid: Header "x-database-name" wajib diisi dan hanya boleh berupa huruf, angka, serta underscore'
 			},
 			{ status: 400 }
 		);
@@ -31,17 +31,17 @@ export async function POST({ request }) {
 	try {
 		body = await request.json();
 	} catch {
-		return json({ error: 'Bad Request: Invalid JSON body' }, { status: 400 });
+		return json({ error: 'Permintaan tidak valid: Format JSON tidak valid' }, { status: 400 });
 	}
 
 	const { sql, params = [] } = body || {};
 
 	if (!sql || typeof sql !== 'string' || !sql.trim()) {
-		return json({ error: 'Bad Request: "sql" query string is required' }, { status: 400 });
+		return json({ error: 'Permintaan tidak valid: String query "sql" wajib diisi' }, { status: 400 });
 	}
 
 	if (!Array.isArray(params)) {
-		return json({ error: 'Bad Request: "params" must be an array' }, { status: 400 });
+		return json({ error: 'Permintaan tidak valid: "params" harus berupa array' }, { status: 400 });
 	}
 
 	// 4. Eksekusi query ke database target via dynamic connection pool
@@ -60,7 +60,7 @@ export async function POST({ request }) {
 		console.error(`Query error on database "${dbName}":`, err);
 		return json(
 			{
-				error: err.message || 'Database query failed'
+				error: err.message || 'Eksekusi query database gagal'
 			},
 			{ status: 500 }
 		);
