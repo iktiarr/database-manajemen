@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { adminPool, closeTargetPool } from '#lib/server/db.js';
+import { deleteProjectCredentials } from '#lib/server/credentials.js';
 
 /**
  * Endpoint GET untuk mendapatkan daftar database
@@ -116,6 +117,7 @@ export async function DELETE({ request, locals }) {
 	try {
 		await closeTargetPool(dbName);
 		await adminPool.query(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
+		await deleteProjectCredentials(dbName);
 		return json({ success: true, message: `Proyek "${dbName}" berhasil dihapus.` });
 	} catch (err) {
 		console.error(`Error deleting database "${dbName}":`, err);

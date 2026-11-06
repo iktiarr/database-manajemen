@@ -40,8 +40,10 @@
 	let showConnPassword = $state(false);
 	let copiedConnString = $state(false);
 
-	// Custom DB Password state (Auto-Generated Secure Password)
-	let customDbPassword = $state('');
+	// Kredensial Database Terisolasi per Proyek (Live dari Server Neon)
+	let projectRole = $state('');
+	let projectPassword = $state('');
+	let isChangingPassword = $state(false);
 	let showChangeDbPasswordModal = $state(false);
 	let generatedPasswordDisplay = $state('');
 	let copiedGeneratedPassword = $state(false);
@@ -80,11 +82,6 @@
 	let isDeletingRow = $state(false);
 
 	onMount(() => {
-		const savedCustomPw = localStorage.getItem('neon_custom_db_password');
-		if (savedCustomPw) {
-			customDbPassword = savedCustomPw;
-		}
-
 		const savedStudioDb = localStorage.getItem('app_studio_db');
 		if (savedStudioDb && userProjects.some((d) => d.name === savedStudioDb)) {
 			selectedStudioDb = savedStudioDb;
@@ -93,45 +90,37 @@
 		}
 	});
 
-	function generateSecurePassword(length = 24) {
-		const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-		const lowercase = 'abcdefghijkmnpqrstuvwxyz';
-		const numbers = '23456789';
-		const symbols = '!@#$%^&*()_+~=';
-		const allChars = uppercase + lowercase + numbers + symbols;
+	async function handleGenerateAutomaticPassword() {
+		if (!selectedStudioDb) return;
+		isChangingPassword = true;
+		try {
+			const res = await fetch('/api/studio', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: masterKey.trim() ? `Bearer ${masterKey.trim()}` : ''
+				},
+				body: JSON.stringify({
+					action: 'changePassword',
+					dbName: selectedStudioDb
+				})
+			});
+			const result = await res.json();
+			if (!res.ok) throw new Error(result.error || 'Gagal mengubah password di database server.');
 
-		const values = new Uint32Array(length);
-		crypto.getRandomValues(values);
-
-		let password = [
-			uppercase[values[0] % uppercase.length],
-			lowercase[values[1] % lowercase.length],
-			numbers[values[2] % numbers.length],
-			symbols[values[3] % symbols.length]
-		];
-
-		for (let i = 4; i < length; i++) {
-			password.push(allChars[values[i] % allChars.length]);
+			projectRole = result.roleName;
+			projectPassword = result.newPassword;
+			generatedPasswordDisplay = result.newPassword;
+			copiedGeneratedPassword = false;
+			showChangeDbPasswordModal = true;
+			toast.success('Password Diubah di Server', {
+				description: 'Password lama seketika hangus. Project sebelumnya wajib disesuaikan.'
+			});
+		} catch (err) {
+			toast.error('Gagal Mengubah Password', { description: err.message });
+		} finally {
+			isChangingPassword = false;
 		}
-
-		for (let i = password.length - 1; i > 0; i--) {
-			const j = values[i] % (i + 1);
-			[password[i], password[j]] = [password[j], password[i]];
-		}
-
-		return password.join('');
-	}
-
-	function handleGenerateAutomaticPassword() {
-		const newSecurePw = generateSecurePassword(24);
-		customDbPassword = newSecurePw;
-		generatedPasswordDisplay = newSecurePw;
-		copiedGeneratedPassword = false;
-		if (typeof localStorage !== 'undefined') {
-			localStorage.setItem('neon_custom_db_password', newSecurePw);
-		}
-		showChangeDbPasswordModal = true;
-		toast.success('Password Diubah Otomatis', { description: 'Password 24 karakter aman berhasil diterapkan.' });
 	}
 
 	function copyGeneratedPassword() {
@@ -172,8 +161,11 @@
 			if (dbName) {
 				u.pathname = `/${dbName}`;
 			}
-			if (customDbPassword.trim()) {
-				u.password = customDbPassword.trim();
+			if (projectRole) {
+				u.username = projectRole;
+			}
+			if (projectPassword) {
+				u.password = projectPassword;
 			}
 			let connStr = u.toString();
 			if (masked) {
@@ -250,6 +242,10 @@
 			const result = await res.json();
 			if (res.ok && result.tables) {
 				studioTables = result.tables;
+				if (result.credentials) {
+					projectRole = result.credentials.roleName || '';
+					projectPassword = result.credentials.dbPassword || '';
+				}
 				if (studioTables.length > 0) {
 					const stillExists = selectedTable && studioTables.some((t) => t.name === selectedTable);
 					const tableToLoad = stillExists ? selectedTable : studioTables[0].name;
@@ -605,9 +601,15 @@
 						<button
 							type="button"
 							onclick={handleGenerateAutomaticPassword}
-							class="text-[11px] px-2.5 py-1 border border-neutral-200 rounded-lg text-neutral-700 hover:bg-neutral-50 font-medium transition cursor-pointer"
+							disabled={isChangingPassword}
+							class="text-[11px] px-2.5 py-1 border border-neutral-200 rounded-lg text-neutral-700 hover:bg-neutral-50 font-medium transition cursor-pointer flex items-center gap-1.5"
 						>
-							Ubah Password
+							{#if isChangingPassword}
+								<Spinner size="xs" />
+								<span>Mengubah...</span>
+							{:else}
+								<span>Ubah Password</span>
+							{/if}
 						</button>
 					</div>
 				</div>
@@ -784,16 +786,25 @@
 		<Dialog.Header class="pb-2 border-b border-neutral-100">
 			<Dialog.Title class="text-sm font-semibold text-neutral-900 flex items-center gap-2">
 				<ShieldCheckIcon class="w-4 h-4 text-emerald-600" />
-				<span>Password Database Otomatis</span>
+				<span>Password Diubah di Server Neon</span>
 			</Dialog.Title>
 			<Dialog.Description class="text-xs text-neutral-500">
-				Sistem telah menghasilkan password baru dengan standar keamanan tinggi (24 karakter acak). Password ini telah diterapkan pada Connection String.
+				Password baru diterapkan langsung ke database PostgreSQL Neon. Password lama seketika hangus dan tidak berlaku lagi.
 			</Dialog.Description>
 		</Dialog.Header>
 
 		<div class="space-y-4 pt-3">
+			<div class="p-3 bg-amber-50/70 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
+				<div class="font-semibold flex items-center gap-1.5">
+					<span>Klien Lama Wajib Disesuaikan</span>
+				</div>
+				<p class="text-[11px] text-amber-700 leading-relaxed">
+					Project sebelumnya yang masih menggunakan password lama akan langsung gagal terhubung (ditolak server). Harap salin Connection String terbaru di bawah ini ke file <code>.env</code> project Anda.
+				</p>
+			</div>
+
 			<div class="space-y-1.5">
-				<label for="auto-gen-pw-input" class="text-xs font-medium text-neutral-700">Password Baru</label>
+				<label for="auto-gen-pw-input" class="text-xs font-medium text-neutral-700">Password Baru ({projectRole || selectedStudioDb})</label>
 				<div class="relative flex items-center">
 					<input
 						id="auto-gen-pw-input"
@@ -816,18 +827,16 @@
 						{/if}
 					</button>
 				</div>
-				<p class="text-[11px] text-neutral-400">
-					Kombinasi huruf besar, kecil, angka, dan simbol kriptografis kuat tanpa karakter ambigu.
-				</p>
 			</div>
 
 			<Dialog.Footer class="pt-3 border-t border-neutral-100 flex items-center justify-between">
 				<button
 					type="button"
 					onclick={handleGenerateAutomaticPassword}
+					disabled={isChangingPassword}
 					class="text-xs text-neutral-600 hover:text-black font-medium transition cursor-pointer flex items-center gap-1.5"
 				>
-					<RefreshCwIcon class="w-3 h-3" />
+					<RefreshCwIcon class="w-3 h-3 {isChangingPassword ? 'animate-spin' : ''}" />
 					<span>Acak Ulang</span>
 				</button>
 				<Button

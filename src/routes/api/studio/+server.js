@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { getTargetPool, adminPool } from '#lib/server/db.js';
+import { getOrCreateProjectCredentials, rotateProjectPassword } from '#lib/server/credentials.js';
 
 function isAuthorized(event) {
 	if (event.locals.admin) return true;
@@ -32,23 +33,27 @@ export async function GET(event) {
 	try {
 		const pool = getTargetPool(dbName);
 
-		// Jika nama tabel tidak diberikan, kembalikan daftar semua tabel public dalam 1 kueri agregat cepat
+		// Jika nama tabel tidak diberikan, kembalikan daftar semua tabel public dan kredensial role proyek
 		if (!tableName) {
-			const tablesRes = await pool.query(`
-				SELECT 
-					t.table_name as name,
-					COALESCE(s.n_live_tup, 0)::int as "rowCount"
-				FROM information_schema.tables t
-				LEFT JOIN pg_stat_user_tables s ON s.relname = t.table_name AND s.schemaname = 'public'
-				WHERE t.table_schema = 'public'
-				  AND t.table_type = 'BASE TABLE'
-				ORDER BY t.table_name ASC
-			`);
+			const [tablesRes, credentials] = await Promise.all([
+				pool.query(`
+					SELECT 
+						t.table_name as name,
+						COALESCE(s.n_live_tup, 0)::int as "rowCount"
+					FROM information_schema.tables t
+					LEFT JOIN pg_stat_user_tables s ON s.relname = t.table_name AND s.schemaname = 'public'
+					WHERE t.table_schema = 'public'
+					  AND t.table_type = 'BASE TABLE'
+					ORDER BY t.table_name ASC
+				`),
+				getOrCreateProjectCredentials(dbName)
+			]);
 
 			return json({
 				success: true,
 				dbName,
-				tables: tablesRes.rows
+				tables: tablesRes.rows,
+				credentials
 			});
 		}
 
@@ -161,6 +166,18 @@ export async function POST(event) {
 	}
 
 	try {
+		// Action: Ubah Password Database Proyek secara Nyata di Neon PostgreSQL
+		if (action === 'changePassword') {
+			const { newPassword } = body;
+			const result = await rotateProjectPassword(dbName, newPassword);
+			return json({
+				success: true,
+				roleName: result.roleName,
+				newPassword: result.newPassword,
+				message: `Password proyek "${dbName}" berhasil diubah di database server Neon!`
+			});
+		}
+
 		const pool = getTargetPool(dbName);
 
 		// Action: Buat Tabel Baru
