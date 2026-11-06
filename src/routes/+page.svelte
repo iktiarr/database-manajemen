@@ -82,7 +82,6 @@
 				{:else if activeTab === 'realtime'}
 					<RealtimeManager
 						{databases}
-						initialSecret={data?.neonRealtimeSecret || ''}
 					/>
 				{:else if activeTab === 'storage'}
 					<StorageManager />

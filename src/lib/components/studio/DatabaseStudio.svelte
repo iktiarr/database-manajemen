@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -67,6 +67,12 @@
 	let isLoadingStudio = $state(false);
 	let isLoadingTableData = $state(false);
 
+	// Live Realtime Auto-Sync State
+	let isLiveSync = $state(true);
+	let isSyncingInBackground = false;
+	let lastSyncedAt = $state('');
+	let liveSyncTimer = null;
+
 	onMount(() => {
 		const savedCustomPw = localStorage.getItem('neon_custom_db_password');
 		if (savedCustomPw) {
@@ -79,7 +85,46 @@
 		} else if (userProjects[0]) {
 			selectedStudioDb = userProjects[0].name;
 		}
+
+		startLiveSyncInterval();
 	});
+
+	onDestroy(() => {
+		stopLiveSyncInterval();
+	});
+
+	function startLiveSyncInterval() {
+		stopLiveSyncInterval();
+		liveSyncTimer = setInterval(() => {
+			if (!isLiveSync) return;
+			if (typeof document !== 'undefined' && document.hidden) return; // hemat kuota Vercel & Neon saat tab diminimalkan
+			if (viewMode === 'detail' && selectedStudioDb && !isSyncingInBackground) {
+				performSilentSync();
+			}
+		}, 3500);
+	}
+
+	function stopLiveSyncInterval() {
+		if (liveSyncTimer) {
+			clearInterval(liveSyncTimer);
+			liveSyncTimer = null;
+		}
+	}
+
+	async function performSilentSync() {
+		if (isSyncingInBackground || !selectedStudioDb) return;
+		isSyncingInBackground = true;
+		try {
+			await loadStudioTables(selectedStudioDb, true);
+			if (selectedTable) {
+				await loadTableData(selectedStudioDb, selectedTable, true);
+			}
+		} catch (err) {
+			console.error('Silent sync error:', err);
+		} finally {
+			isSyncingInBackground = false;
+		}
+	}
 
 	$effect(() => {
 		if (userProjects.length > 0 && (!selectedStudioDb || !userProjects.some((d) => d.name === selectedStudioDb))) {
@@ -210,9 +255,9 @@
 		}
 	}
 
-	async function loadStudioTables(dbName) {
+	async function loadStudioTables(dbName, silent = false) {
 		if (!dbName) return;
-		isLoadingStudio = true;
+		if (!silent) isLoadingStudio = true;
 		try {
 			const res = await fetch(`/api/studio?db=${encodeURIComponent(dbName)}`, {
 				headers: masterKey.trim() ? { Authorization: `Bearer ${masterKey.trim()}` } : {}
@@ -224,23 +269,24 @@
 					const stillExists = selectedTable && studioTables.some((t) => t.name === selectedTable);
 					const tableToLoad = stillExists ? selectedTable : studioTables[0].name;
 					selectedTable = tableToLoad;
-					await loadTableData(dbName, tableToLoad);
+					await loadTableData(dbName, tableToLoad, silent);
 				} else {
 					selectedTable = null;
 					tableColumns = [];
 					tableRows = [];
 				}
+				lastSyncedAt = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 			}
 		} catch (err) {
 			console.error('Error loading tables:', err);
 		} finally {
-			isLoadingStudio = false;
+			if (!silent) isLoadingStudio = false;
 		}
 	}
 
-	async function loadTableData(dbName, tableName) {
+	async function loadTableData(dbName, tableName, silent = false) {
 		if (!dbName || !tableName) return;
-		isLoadingTableData = true;
+		if (!silent) isLoadingTableData = true;
 		try {
 			const res = await fetch(`/api/studio?db=${encodeURIComponent(dbName)}&table=${encodeURIComponent(tableName)}`, {
 				headers: masterKey.trim() ? { Authorization: `Bearer ${masterKey.trim()}` } : {}
@@ -249,11 +295,12 @@
 			if (res.ok) {
 				tableColumns = result.columns || [];
 				tableRows = result.rows || [];
+				lastSyncedAt = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 			}
 		} catch (err) {
 			console.error('Error loading table data:', err);
 		} finally {
-			isLoadingTableData = false;
+			if (!silent) isLoadingTableData = false;
 		}
 	}
 
@@ -420,8 +467,8 @@
 	<!-- ========================================== -->
 	{:else}
 		<div class="space-y-6">
-			<!-- Top Bar: Ikon + Kembali saja, project name, dan Refresh ikon saja -->
-			<div class="flex items-center justify-between pb-4 border-b border-neutral-200">
+			<!-- Top Bar: Ikon + Kembali, project name, Live Sync Toggle & Refresh instan -->
+			<div class="flex items-center justify-between pb-4 border-b border-neutral-200 flex-wrap gap-2">
 				<div class="flex items-center gap-3">
 					<button
 						type="button"
@@ -432,17 +479,57 @@
 						<span>Kembali</span>
 					</button>
 					<span class="text-neutral-300">|</span>
-					<h2 class="text-base font-semibold text-neutral-900">{selectedStudioDb}</h2>
+					<div class="flex items-center gap-2">
+						<h2 class="text-base font-semibold text-neutral-900">{selectedStudioDb}</h2>
+						{#if isLiveSync}
+							<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+								<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+								Live Realtime
+							</span>
+						{/if}
+					</div>
 				</div>
 
-				<div>
+				<div class="flex items-center gap-2">
+					<!-- Tombol Toggle Live Sync Otomatis -->
 					<button
 						type="button"
-						onclick={() => loadStudioTables(selectedStudioDb)}
-						class="p-2 border border-neutral-200 rounded-lg hover:bg-neutral-100 text-neutral-700 transition cursor-pointer"
-						title="Segarkan"
+						onclick={() => {
+							isLiveSync = !isLiveSync;
+							if (isLiveSync) {
+								startLiveSyncInterval();
+								toast.info('Live Sync Aktif', { description: 'Data diperbarui otomatis tiap 3.5 detik.' });
+							} else {
+								stopLiveSyncInterval();
+								toast.info('Live Sync Dimatikan', { description: 'Mode pembaruan data manual.' });
+							}
+						}}
+						class="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-lg border transition cursor-pointer {isLiveSync
+							? 'bg-neutral-900 text-white border-neutral-900'
+							: 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'}"
+						title={isLiveSync ? 'Klik untuk mematikan auto-sync' : 'Klik untuk mengaktifkan auto-sync tiap 3.5s'}
 					>
-						<RefreshCwIcon class="w-4 h-4 {isLoadingStudio ? 'animate-spin' : ''}" />
+						<span class="w-2 h-2 rounded-full {isLiveSync ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-400'}"></span>
+						<span>{isLiveSync ? 'Auto-Sync: ON' : 'Auto-Sync: OFF'}</span>
+					</button>
+
+					{#if lastSyncedAt}
+						<span class="text-[10px] text-neutral-400 font-mono hidden sm:inline" title="Waktu sinkronisasi terakhir">
+							{lastSyncedAt}
+						</span>
+					{/if}
+
+					<button
+						type="button"
+						onclick={() => {
+							loadStudioTables(selectedStudioDb, false);
+							toast.success('Data Disegarkan', { description: 'Menyinkronkan data terbaru dari server.' });
+						}}
+						class="px-2.5 py-1 border border-neutral-200 rounded-lg hover:bg-neutral-100 text-neutral-700 text-xs font-medium transition cursor-pointer flex items-center gap-1.5"
+						title="Segarkan data sekarang (1 klik)"
+					>
+						<RefreshCwIcon class="w-3.5 h-3.5 {isLoadingStudio ? 'animate-spin' : ''}" />
+						<span class="hidden sm:inline">Segarkan</span>
 					</button>
 				</div>
 			</div>
@@ -547,21 +634,33 @@
 							Pilih tabel dari daftar di sebelah kiri untuk melihat isi baris dan kolom.
 						</div>
 					{:else}
-						<!-- Header Tabel: Nama Tabel & Refresh Data -->
+						<!-- Header Tabel: Nama Tabel & Refresh Data Instan -->
 						<div class="p-3.5 border-b border-neutral-100 flex items-center justify-between flex-wrap gap-2">
 							<div class="flex items-center gap-2">
 								<h3 class="text-sm font-semibold text-neutral-900">{selectedTable}</h3>
-								<span class="text-[11px] text-neutral-400">({tableRows.length} baris)</span>
+								<span class="text-[11px] font-mono text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-full">
+									{tableRows.length} baris
+								</span>
+								{#if isLiveSync}
+									<span class="flex items-center gap-1 text-[10px] text-emerald-600 font-medium">
+										<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+										Live
+									</span>
+								{/if}
 							</div>
 
-							<div>
+							<div class="flex items-center gap-1.5">
 								<button
 									type="button"
-									onclick={() => loadTableData(selectedStudioDb, selectedTable)}
-									class="p-1.5 border border-neutral-200 rounded-lg hover:bg-neutral-50 text-neutral-700 transition cursor-pointer"
-									title="Segarkan data tabel"
+									onclick={() => {
+										loadTableData(selectedStudioDb, selectedTable, false);
+										toast.success('Tabel Disegarkan', { description: `Data tabel "${selectedTable}" diperbarui.` });
+									}}
+									class="px-2.5 py-1 border border-neutral-200 rounded-lg hover:bg-neutral-50 text-neutral-700 text-xs font-medium transition cursor-pointer flex items-center gap-1.5"
+									title="Segarkan data tabel ini sekarang"
 								>
-									<RefreshCwIcon class="w-3.5 h-3.5 {isLoadingTableData ? 'animate-spin' : ''}" />
+									<RefreshCwIcon class="w-3 h-3 {isLoadingTableData ? 'animate-spin' : ''}" />
+									<span>Perbarui Data</span>
 								</button>
 							</div>
 						</div>

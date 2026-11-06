@@ -18,19 +18,11 @@
 	let {
 		databases = [],
 		initialEndpoint = 'https://ep-small-heart-b3pici55.rt.c-4.ap-southeast-1.aws.neon.tech/',
-		initialSecret = ''
+		initialSecret = 'nrt_live_1-8iWilDq4tLfIlH3fxpd5EsSPxoN5-FgbhLk-NDMZzw'
 	} = $props();
 
 	let endpointUrl = $state('https://ep-small-heart-b3pici55.rt.c-4.ap-southeast-1.aws.neon.tech/');
-	let realtimeSecret = $state('');
-
-	$effect(() => {
-		if (initialEndpoint) endpointUrl = initialEndpoint;
-	});
-
-	$effect(() => {
-		if (initialSecret) realtimeSecret = initialSecret;
-	});
+	let realtimeSecret = $state('nrt_live_1-8iWilDq4tLfIlH3fxpd5EsSPxoN5-FgbhLk-NDMZzw');
 	let showSecret = $state(false);
 	let copiedEndpoint = $state(false);
 	let copiedSecret = $state(false);
@@ -352,3 +344,4 @@
 		</div>
 	</Card.Root>
 </div>
+

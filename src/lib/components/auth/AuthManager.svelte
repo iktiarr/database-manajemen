@@ -282,8 +282,8 @@
 				{/each}
 			</div>
 		{:else}
-			<div class="py-8 flex justify-center items-center">
-				<Spinner size="md" />
+			<div class="py-8 text-center text-xs text-neutral-400">
+				Memuat kunci publik dari JWKS endpoint...
 			</div>
 		{/if}
 	</Card.Root>
@@ -325,3 +325,4 @@
 		{/if}
 	</Card.Root>
 </div>
+

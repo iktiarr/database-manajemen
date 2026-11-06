@@ -11,13 +11,13 @@ const poolCache = new Map();
 
 /**
  * Pool koneksi PostgreSQL admin untuk operasi tingkat server (misalnya: CREATE DATABASE).
- * Menghubungkan ke database default/admin (misal: 'postgres').
+ * Menghubungkan ke database default/admin (misal: 'postgres' atau 'neondb').
  */
 export const adminPool = new Pool({
 	connectionString: env.ADMIN_DATABASE_URL || process.env.ADMIN_DATABASE_URL || env.DATABASE_BASE_URL || process.env.DATABASE_BASE_URL,
-	max: 5,
-	idleTimeoutMillis: 30000,
-	connectionTimeoutMillis: 10000
+	max: 2,
+	idleTimeoutMillis: 10000,
+	connectionTimeoutMillis: 5000
 });
 
 adminPool.on('error', (err) => {
@@ -26,6 +26,7 @@ adminPool.on('error', (err) => {
 
 /**
  * Mengambil atau membuat pool koneksi ke database target secara dinamis.
+ * Mengutamakan Connection Pooler (-pooler) untuk menghemat RAM Neon dan memaksimalkan throughput serverless.
  * @param {string} dbName - Nama database PostgreSQL tujuan
  * @returns {pg.Pool} Instance pool untuk database tersebut
  */
@@ -39,13 +40,17 @@ export function getTargetPool(dbName) {
 		return poolCache.get(dbName);
 	}
 
+	// Utamakan DATABASE_URL (dengan connection pooler) untuk efisiensi serverless & Neon
 	const rawBaseUrl =
+		env.DATABASE_URL ||
+		process.env.DATABASE_URL ||
 		env.DATABASE_BASE_URL ||
 		process.env.DATABASE_BASE_URL ||
 		env.ADMIN_DATABASE_URL ||
 		process.env.ADMIN_DATABASE_URL;
+
 	if (!rawBaseUrl) {
-		throw new Error('DATABASE_BASE_URL or ADMIN_DATABASE_URL is not defined in environment variables');
+		throw new Error('DATABASE_URL or DATABASE_BASE_URL is not defined in environment variables');
 	}
 
 	// Ganti / sesuaikan path database pada URL target
@@ -54,9 +59,9 @@ export function getTargetPool(dbName) {
 
 	const pool = new Pool({
 		connectionString: targetUrl.toString(),
-		max: 10,
-		idleTimeoutMillis: 30000,
-		connectionTimeoutMillis: 10000
+		max: 3, // Batasi jumlah koneksi per instans serverless agar Neon compute tidak overload
+		idleTimeoutMillis: 10000, // Lepaskan koneksi idle dalam 10 detik agar Neon bisa auto-suspend saat sepi
+		connectionTimeoutMillis: 5000
 	});
 
 	pool.on('error', (err) => {

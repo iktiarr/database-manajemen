@@ -5,7 +5,6 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Spinner } from '$lib/components/ui/spinner/index.js';
-	import { toast } from 'svelte-sonner';
 	import EyeIcon from '@lucide/svelte/icons/eye';
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 
@@ -34,11 +33,8 @@
 				method="POST"
 				use:enhance={() => {
 					loading = true;
-					return async ({ update, result }) => {
+					return async ({ update }) => {
 						loading = false;
-						if (result.type === 'failure' && result.data?.error) {
-							toast.error('Gagal Masuk', { description: result.data.error });
-						}
 						await update();
 					};
 				}}

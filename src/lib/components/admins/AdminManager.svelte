@@ -143,7 +143,7 @@
 
 			if (res.ok) {
 				if (isUpdatingSelf) {
-					toast.success('Profil Diperbarui', { description: 'Mengalihkan ke halaman login' });
+					toast.success('Profil Diperbarui', { description: 'Mengalihkan ke halaman login...' });
 					setTimeout(() => {
 						window.location.href = '/login';
 					}, 1000);

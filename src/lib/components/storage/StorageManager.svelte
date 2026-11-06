@@ -264,11 +264,7 @@
 			<span class="text-xs text-neutral-400">{fileList.length} Objek</span>
 		</div>
 
-		{#if isLoadingFiles}
-			<div class="py-10 flex justify-center items-center">
-				<Spinner size="md" />
-			</div>
-		{:else if fileList.length === 0}
+		{#if fileList.length === 0}
 			<div class="py-10 text-center text-xs text-neutral-400 border border-dashed border-neutral-200 rounded-xl">
 				Belum ada objek yang tercatat di bucket. Silakan unggah objek pertama menggunakan form di atas.
 			</div>
@@ -311,3 +307,4 @@
 		{/if}
 	</Card.Root>
 </div>
+

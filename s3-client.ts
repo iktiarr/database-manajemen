@@ -10,3 +10,4 @@ await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: "Hello Worl
 
 const url = await getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: 3600 });
 console.log(`[view] ${url}`);
+

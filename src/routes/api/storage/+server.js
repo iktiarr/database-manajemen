@@ -107,3 +107,4 @@ export async function POST(event) {
 		return json({ error: err.message || 'Terjadi kesalahan pada layanan S3 Storage' }, { status: 500 });
 	}
 }
+

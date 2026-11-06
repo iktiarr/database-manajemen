@@ -4,28 +4,22 @@ import { env } from '$env/dynamic/private';
 import { fail } from '@sveltejs/kit';
 
 export async function load({ locals }) {
-	let admins = [];
-	try {
-		admins = await getAllAdmins();
-	} catch (err) {
-		console.error('Error fetching admins in load:', err);
-	}
-
-	let databases = [];
-	try {
-		const res = await adminPool.query(`
+	// Eksekusi kueri admin dan database secara paralel untuk memangkas waktu muat halaman awal
+	const [adminsRes, dbsRes] = await Promise.allSettled([
+		getAllAdmins(),
+		adminPool.query(`
 			SELECT datname as name,
-			       pg_size_pretty(pg_database_size(datname)) as size,
+			       COALESCE(pg_size_pretty(pg_database_size(datname)), '0 kB') as size,
 			       pg_encoding_to_char(encoding) as encoding
 			FROM pg_database
 			WHERE datistemplate = false
 			  AND datname NOT IN ('postgres', 'neondb')
 			ORDER BY datname ASC
-		`);
-		databases = res.rows;
-	} catch (err) {
-		console.error('Error fetching databases in load:', err);
-	}
+		`)
+	]);
+
+	const admins = adminsRes.status === 'fulfilled' ? adminsRes.value || [] : [];
+	const databases = dbsRes.status === 'fulfilled' ? dbsRes.value.rows || [] : [];
 
 	const rawDirect = env.DATABASE_BASE_URL || process.env.DATABASE_BASE_URL || env.ADMIN_DATABASE_URL || process.env.ADMIN_DATABASE_URL || '';
 	const rawPooled = env.DATABASE_URL || process.env.DATABASE_URL || '';
